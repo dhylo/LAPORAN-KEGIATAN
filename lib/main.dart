@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -10,6 +10,9 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image/image.dart' as img;
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:cross_file/cross_file.dart';
+import 'package:pasteboard/pasteboard.dart';
 
 const navy = Color(0xFF12345B);
 const blue = Color(0xFF1D70B8);
@@ -53,7 +56,7 @@ class App extends StatelessWidget {
 
 class StoreScope extends InheritedNotifier<AppStore> {
   const StoreScope({super.key, required AppStore store, required super.child})
-      : super(notifier: store);
+    : super(notifier: store);
 
   static AppStore of(BuildContext context) {
     return context.dependOnInheritedWidgetOfExactType<StoreScope>()!.notifier!;
@@ -83,10 +86,10 @@ class Staff {
   Staff({required this.id, required this.name, this.position = ''});
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'position': position,
-      };
+    'id': id,
+    'name': name,
+    'position': position,
+  };
   factory Staff.fromJson(Map<String, dynamic> json) {
     return Staff(
       id: json['id'] as String,
@@ -103,10 +106,10 @@ class Finding {
   Finding({this.text = '', this.picId, this.target});
 
   Map<String, dynamic> toJson() => {
-        'text': text,
-        'picId': picId,
-        'target': target?.toIso8601String(),
-      };
+    'text': text,
+    'picId': picId,
+    'target': target?.toIso8601String(),
+  };
   factory Finding.fromJson(Map<String, dynamic> json) {
     return Finding(
       text: (json['text'] ?? '') as String,
@@ -140,15 +143,15 @@ class Inspection {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'date': date.toIso8601String(),
-        'unitId': unitId,
-        'findings': findings.map((item) => item.toJson()).toList(),
-        'notes': notes,
-        'picSignerId': picSignerId,
-        'signature': signature,
-        'compositeImage': compositeImage,
-      };
+    'id': id,
+    'date': date.toIso8601String(),
+    'unitId': unitId,
+    'findings': findings.map((item) => item.toJson()).toList(),
+    'notes': notes,
+    'picSignerId': picSignerId,
+    'signature': signature,
+    'compositeImage': compositeImage,
+  };
 
   factory Inspection.fromJson(Map<String, dynamic> json) {
     final rawFindings = (json['findings'] as List<dynamic>? ?? []);
@@ -215,10 +218,18 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> saveAll() async {
-    await prefs.setString('units', jsonEncode(units.map((e) => e.toJson()).toList()));
-    await prefs.setString('staff', jsonEncode(staff.map((e) => e.toJson()).toList()));
     await prefs.setString(
-        'inspections', jsonEncode(inspections.map((e) => e.toJson()).toList()));
+      'units',
+      jsonEncode(units.map((e) => e.toJson()).toList()),
+    );
+    await prefs.setString(
+      'staff',
+      jsonEncode(staff.map((e) => e.toJson()).toList()),
+    );
+    await prefs.setString(
+      'inspections',
+      jsonEncode(inspections.map((e) => e.toJson()).toList()),
+    );
     await prefs.setString('companyName', companyName);
     notifyListeners();
   }
@@ -269,15 +280,24 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final menus = <_MenuItem>[
       _MenuItem('Inspeksi Bulanan', Icons.fact_check, true, () {
-        Navigator.push(context,
-            MaterialPageRoute(builder: (_) => const InspectionListPage()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const InspectionListPage()),
+        );
       }),
-      _MenuItem('Monitoring Kesehatan Bulanan', Icons.health_and_safety, false, null),
+      _MenuItem(
+        'Monitoring Kesehatan Bulanan',
+        Icons.health_and_safety,
+        false,
+        null,
+      ),
       _MenuItem('Evidence SLA Bulanan', Icons.photo_library, false, null),
       _MenuItem('Evaluasi Bulanan', Icons.assessment, false, null),
       _MenuItem('Pengaturan Master', Icons.settings, true, () {
-        Navigator.push(context,
-            MaterialPageRoute(builder: (_) => const MasterPage()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MasterPage()),
+        );
       }),
     ];
 
@@ -295,11 +315,14 @@ class HomePage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Beranda',
-                    style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.bold,
-                        color: navy)),
+                const Text(
+                  'Beranda',
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    color: navy,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 const Text('Pilih menu untuk mulai bekerja.'),
                 const SizedBox(height: 28),
@@ -307,17 +330,19 @@ class HomePage extends StatelessWidget {
                   child: GridView.builder(
                     gridDelegate:
                         const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 330,
-                      mainAxisExtent: 150,
-                      crossAxisSpacing: 18,
-                      mainAxisSpacing: 18,
-                    ),
+                          maxCrossAxisExtent: 330,
+                          mainAxisExtent: 150,
+                          crossAxisSpacing: 18,
+                          mainAxisSpacing: 18,
+                        ),
                     itemCount: menus.length,
                     itemBuilder: (context, index) {
                       final menu = menus[index];
                       return Card(
                         elevation: menu.enabled ? 2 : 0,
-                        color: menu.enabled ? Colors.white : Colors.grey.shade200,
+                        color: menu.enabled
+                            ? Colors.white
+                            : Colors.grey.shade200,
                         child: InkWell(
                           onTap: menu.enabled ? menu.action : null,
                           borderRadius: BorderRadius.circular(12),
@@ -325,18 +350,21 @@ class HomePage extends StatelessWidget {
                             padding: const EdgeInsets.all(20),
                             child: Row(
                               children: [
-                                Icon(menu.icon,
-                                    size: 40,
-                                    color: menu.enabled ? blue : Colors.grey),
+                                Icon(
+                                  menu.icon,
+                                  size: 40,
+                                  color: menu.enabled ? blue : Colors.grey,
+                                ),
                                 const SizedBox(width: 16),
                                 Expanded(
-                                  child: Text(menu.title,
-                                      style: TextStyle(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w600,
-                                          color: menu.enabled
-                                              ? navy
-                                              : Colors.grey)),
+                                  child: Text(
+                                    menu.title,
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w600,
+                                      color: menu.enabled ? navy : Colors.grey,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -370,23 +398,30 @@ class MasterPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-          title: const Text('Pengaturan Master'),
-          backgroundColor: navy,
-          foregroundColor: Colors.white),
+        title: const Text('Pengaturan Master'),
+        backgroundColor: navy,
+        foregroundColor: Colors.white,
+      ),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
           MasterTile('Master Unit', Icons.business, () {
-            Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const UnitPage()));
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const UnitPage()),
+            );
           }),
           MasterTile('Master Staff / PIC', Icons.people, () {
-            Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const StaffPage()));
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const StaffPage()),
+            );
           }),
           MasterTile('Pengaturan Umum', Icons.tune, () {
-            Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const SettingsPage()));
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsPage()),
+            );
           }),
         ],
       ),
@@ -421,9 +456,10 @@ class UnitPage extends StatelessWidget {
     final store = StoreScope.of(context);
     return Scaffold(
       appBar: AppBar(
-          title: const Text('Master Unit'),
-          backgroundColor: navy,
-          foregroundColor: Colors.white),
+        title: const Text('Master Unit'),
+        backgroundColor: navy,
+        foregroundColor: Colors.white,
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => editUnit(context),
         icon: const Icon(Icons.add),
@@ -439,17 +475,21 @@ class UnitPage extends StatelessWidget {
                 return Card(
                   child: ListTile(
                     title: Text(unit.name),
-                    subtitle: Text(unit.code.isEmpty
-                        ? 'Tanpa kode'
-                        : 'Kode: ${unit.code}'),
+                    subtitle: Text(
+                      unit.code.isEmpty ? 'Tanpa kode' : 'Kode: ${unit.code}',
+                    ),
                     trailing: Wrap(
                       children: [
                         IconButton(
-                            onPressed: () => editUnit(context, value: unit),
-                            icon: const Icon(Icons.edit)),
+                          onPressed: () => editUnit(context, value: unit),
+                          icon: const Icon(Icons.edit),
+                        ),
                         IconButton(
-                          onPressed: () => deleteConfirm(context, 'unit ini',
-                              () => store.deleteUnit(unit.id)),
+                          onPressed: () => deleteConfirm(
+                            context,
+                            'unit ini',
+                            () => store.deleteUnit(unit.id),
+                          ),
                           icon: const Icon(Icons.delete, color: Colors.red),
                         ),
                       ],
@@ -474,21 +514,32 @@ Future<void> editUnit(BuildContext context, {Unit? value}) async {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'Nama unit')),
+            TextField(
+              controller: name,
+              decoration: const InputDecoration(labelText: 'Nama unit'),
+            ),
             const SizedBox(height: 12),
-            TextField(controller: code, decoration: const InputDecoration(labelText: 'Kode unit')),
+            TextField(
+              controller: code,
+              decoration: const InputDecoration(labelText: 'Kode unit'),
+            ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Batal'),
+        ),
         FilledButton(
           onPressed: () {
             if (name.text.trim().isEmpty) return;
             Navigator.pop(
               dialogContext,
               Unit(
-                id: value?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+                id:
+                    value?.id ??
+                    DateTime.now().microsecondsSinceEpoch.toString(),
                 name: name.text.trim(),
                 code: code.text.trim(),
               ),
@@ -501,7 +552,9 @@ Future<void> editUnit(BuildContext context, {Unit? value}) async {
   );
   name.dispose();
   code.dispose();
-  if (result != null && context.mounted) await StoreScope.of(context).saveUnit(result);
+  if (result != null && context.mounted) {
+    await StoreScope.of(context).saveUnit(result);
+  }
 }
 
 class StaffPage extends StatelessWidget {
@@ -512,9 +565,10 @@ class StaffPage extends StatelessWidget {
     final store = StoreScope.of(context);
     return Scaffold(
       appBar: AppBar(
-          title: const Text('Master Staff / PIC'),
-          backgroundColor: navy,
-          foregroundColor: Colors.white),
+        title: const Text('Master Staff / PIC'),
+        backgroundColor: navy,
+        foregroundColor: Colors.white,
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => editStaff(context),
         icon: const Icon(Icons.add),
@@ -530,17 +584,23 @@ class StaffPage extends StatelessWidget {
                 return Card(
                   child: ListTile(
                     title: Text(person.name),
-                    subtitle: Text(person.position.isEmpty
-                        ? 'Jabatan belum diisi'
-                        : person.position),
+                    subtitle: Text(
+                      person.position.isEmpty
+                          ? 'Jabatan belum diisi'
+                          : person.position,
+                    ),
                     trailing: Wrap(
                       children: [
                         IconButton(
-                            onPressed: () => editStaff(context, value: person),
-                            icon: const Icon(Icons.edit)),
+                          onPressed: () => editStaff(context, value: person),
+                          icon: const Icon(Icons.edit),
+                        ),
                         IconButton(
-                          onPressed: () => deleteConfirm(context, 'staff ini',
-                              () => store.deleteStaff(person.id)),
+                          onPressed: () => deleteConfirm(
+                            context,
+                            'staff ini',
+                            () => store.deleteStaff(person.id),
+                          ),
                           icon: const Icon(Icons.delete, color: Colors.red),
                         ),
                       ],
@@ -565,21 +625,32 @@ Future<void> editStaff(BuildContext context, {Staff? value}) async {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'Nama staff / PIC')),
+            TextField(
+              controller: name,
+              decoration: const InputDecoration(labelText: 'Nama staff / PIC'),
+            ),
             const SizedBox(height: 12),
-            TextField(controller: position, decoration: const InputDecoration(labelText: 'Jabatan')),
+            TextField(
+              controller: position,
+              decoration: const InputDecoration(labelText: 'Jabatan'),
+            ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Batal'),
+        ),
         FilledButton(
           onPressed: () {
             if (name.text.trim().isEmpty) return;
             Navigator.pop(
               dialogContext,
               Staff(
-                id: value?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+                id:
+                    value?.id ??
+                    DateTime.now().microsecondsSinceEpoch.toString(),
                 name: name.text.trim(),
                 position: position.text.trim(),
               ),
@@ -592,7 +663,9 @@ Future<void> editStaff(BuildContext context, {Staff? value}) async {
   );
   name.dispose();
   position.dispose();
-  if (result != null && context.mounted) await StoreScope.of(context).saveStaff(result);
+  if (result != null && context.mounted) {
+    await StoreScope.of(context).saveStaff(result);
+  }
 }
 
 class SettingsPage extends StatefulWidget {
@@ -621,9 +694,10 @@ class _SettingsPageState extends State<SettingsPage> {
     final store = StoreScope.of(context);
     return Scaffold(
       appBar: AppBar(
-          title: const Text('Pengaturan Umum'),
-          backgroundColor: navy,
-          foregroundColor: Colors.white),
+        title: const Text('Pengaturan Umum'),
+        backgroundColor: navy,
+        foregroundColor: Colors.white,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: ConstrainedBox(
@@ -631,7 +705,10 @@ class _SettingsPageState extends State<SettingsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Nama perusahaan', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'Nama perusahaan',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               TextField(controller: company),
               const SizedBox(height: 20),
@@ -640,7 +717,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   await store.saveCompany(company.text);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Pengaturan tersimpan')));
+                      const SnackBar(content: Text('Pengaturan tersimpan')),
+                    );
                   }
                 },
                 icon: const Icon(Icons.save),
@@ -674,13 +752,17 @@ class _InspectionListPageState extends State<InspectionListPage> {
 
     return Scaffold(
       appBar: AppBar(
-          title: const Text('Inspeksi Bulanan'),
-          backgroundColor: navy,
-          foregroundColor: Colors.white),
+        title: const Text('Inspeksi Bulanan'),
+        backgroundColor: navy,
+        foregroundColor: Colors.white,
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           if (store.units.isEmpty) {
-            showInfo(context, 'Tambah unit terlebih dahulu di Pengaturan Master.');
+            showInfo(
+              context,
+              'Tambah unit terlebih dahulu di Pengaturan Master.',
+            );
             return;
           }
           final inspection = Inspection(
@@ -689,8 +771,12 @@ class _InspectionListPageState extends State<InspectionListPage> {
             unitId: store.units.first.id,
             findings: [Finding()],
           );
-          Navigator.push(context,
-              MaterialPageRoute(builder: (_) => InspectionFormPage(data: inspection)));
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => InspectionFormPage(data: inspection),
+            ),
+          );
         },
         icon: const Icon(Icons.add),
         label: const Text('Tambah'),
@@ -701,7 +787,9 @@ class _InspectionListPageState extends State<InspectionListPage> {
             padding: const EdgeInsets.all(16),
             child: TextField(
               decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search), labelText: 'Cari tanggal atau unit'),
+                prefixIcon: Icon(Icons.search),
+                labelText: 'Cari tanggal atau unit',
+              ),
               onChanged: (value) => setState(() => query = value),
             ),
           ),
@@ -715,28 +803,42 @@ class _InspectionListPageState extends State<InspectionListPage> {
                       final item = list[index];
                       return Card(
                         child: ListTile(
-                          title: Text(store.findUnit(item.unitId)?.name ?? 'Unit dihapus'),
+                          title: Text(
+                            store.findUnit(item.unitId)?.name ?? 'Unit dihapus',
+                          ),
                           subtitle: Text(
-                              '${dates.format(item.date)} • ${item.findings.length} temuan'),
+                            '${dates.format(item.date)} • ${item.findings.length} temuan',
+                          ),
                           trailing: Wrap(
                             children: [
                               IconButton(
-                                  tooltip: 'PDF',
-                                  onPressed: () => openPdf(context, item),
-                                  icon: const Icon(Icons.picture_as_pdf,
-                                      color: Colors.red)),
+                                tooltip: 'PDF',
+                                onPressed: () => openPdf(context, item),
+                                icon: const Icon(
+                                  Icons.picture_as_pdf,
+                                  color: Colors.red,
+                                ),
+                              ),
                               IconButton(
-                                  onPressed: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (_) => InspectionFormPage(data: item))),
-                                  icon: const Icon(Icons.edit)),
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        InspectionFormPage(data: item),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.edit),
+                              ),
                               IconButton(
                                 onPressed: () => deleteConfirm(
-                                    context,
-                                    'inspeksi ini',
-                                    () => store.deleteInspection(item.id)),
-                                icon: const Icon(Icons.delete, color: Colors.red),
+                                  context,
+                                  'inspeksi ini',
+                                  () => store.deleteInspection(item.id),
+                                ),
+                                icon: const Icon(
+                                  Icons.delete,
+                                  color: Colors.red,
+                                ),
                               ),
                             ],
                           ),
@@ -802,9 +904,10 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
     final store = StoreScope.of(context);
     return Scaffold(
       appBar: AppBar(
-          title: const Text('Inspeksi Bulanan - Halaman 1'),
-          backgroundColor: navy,
-          foregroundColor: Colors.white),
+        title: const Text('Inspeksi Bulanan - Halaman 1'),
+        backgroundColor: navy,
+        foregroundColor: Colors.white,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Center(
@@ -820,7 +923,9 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
                       child: InkWell(
                         onTap: chooseDate,
                         child: InputDecorator(
-                          decoration: const InputDecoration(labelText: 'Hari / Tanggal'),
+                          decoration: const InputDecoration(
+                            labelText: 'Hari / Tanggal',
+                          ),
                           child: Text(dates.format(data.date)),
                         ),
                       ),
@@ -829,17 +934,23 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: data.unitId.isEmpty ? null : data.unitId,
-                        decoration:
-                            const InputDecoration(labelText: 'Inspeksi BUJP ke Unit'),
+                        decoration: const InputDecoration(
+                          labelText: 'Inspeksi BUJP ke Unit',
+                        ),
                         items: store.units
-                            .map((unit) => DropdownMenuItem(
-                                  value: unit.id,
-                                  child: Text(unit.code.isEmpty
+                            .map(
+                              (unit) => DropdownMenuItem(
+                                value: unit.id,
+                                child: Text(
+                                  unit.code.isEmpty
                                       ? unit.name
-                                      : '${unit.name} (${unit.code})'),
-                                ))
+                                      : '${unit.name} (${unit.code})',
+                                ),
+                              ),
+                            )
                             .toList(),
-                        onChanged: (value) => setState(() => data.unitId = value ?? ''),
+                        onChanged: (value) =>
+                            setState(() => data.unitId = value ?? ''),
                       ),
                     ),
                   ],
@@ -860,22 +971,25 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
                 ),
                 const SizedBox(height: 8),
                 ...data.findings.asMap().entries.map(
-                      (entry) => FindingEditor(
-                        index: entry.key,
-                        finding: entry.value,
-                        staff: store.staff,
-                        onChanged: () => setState(() {}),
-                        onRemove: data.findings.length > 1
-                            ? () => setState(() => data.findings.removeAt(entry.key))
-                            : null,
-                      ),
-                    ),
+                  (entry) => FindingEditor(
+                    index: entry.key,
+                    finding: entry.value,
+                    staff: store.staff,
+                    onChanged: () => setState(() {}),
+                    onRemove: data.findings.length > 1
+                        ? () =>
+                              setState(() => data.findings.removeAt(entry.key))
+                        : null,
+                  ),
+                ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: notes,
                   maxLines: 5,
                   decoration: const InputDecoration(
-                      labelText: 'Catatan Temuan', alignLabelWithHint: true),
+                    labelText: 'Catatan Temuan',
+                    alignLabelWithHint: true,
+                  ),
                 ),
                 const SizedBox(height: 18),
                 Row(
@@ -884,12 +998,19 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: selectedSignerId,
-                        decoration: const InputDecoration(labelText: 'Nama TTD (PIC)'),
+                        decoration: const InputDecoration(
+                          labelText: 'Nama TTD (PIC)',
+                        ),
                         items: store.staff
-                            .map((person) => DropdownMenuItem(
-                                  value: person.id,
-                                  child: Text('${person.name} - ${person.position.isEmpty ? '-' : person.position}', overflow: TextOverflow.ellipsis),
-                                ))
+                            .map(
+                              (person) => DropdownMenuItem(
+                                value: person.id,
+                                child: Text(
+                                  '${person.name} - ${person.position.isEmpty ? '-' : person.position}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
                             .toList(),
                         onChanged: (value) => setState(() {
                           selectedSignerId = value;
@@ -902,20 +1023,27 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('TTD digital',
-                              style: TextStyle(fontWeight: FontWeight.w600)),
+                          const Text(
+                            'TTD digital',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
                           const SizedBox(height: 6),
                           Row(
                             children: [
                               OutlinedButton.icon(
-                                  onPressed: chooseSignature,
-                                  icon: const Icon(Icons.upload_file),
-                                  label: const Text('Upload TTD')),
+                                onPressed: chooseSignature,
+                                icon: const Icon(Icons.upload_file),
+                                label: const Text('Upload TTD'),
+                              ),
                               if (data.signature != null)
                                 Padding(
                                   padding: const EdgeInsets.only(left: 14),
-                                  child: Image.memory(base64Decode(data.signature!),
-                                      width: 110, height: 60, fit: BoxFit.contain),
+                                  child: Image.memory(
+                                    base64Decode(data.signature!),
+                                    width: 110,
+                                    height: 60,
+                                    fit: BoxFit.contain,
+                                  ),
                                 ),
                             ],
                           ),
@@ -938,9 +1066,11 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
                       await store.saveInspection(data);
                       if (context.mounted) {
                         Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => DocumentationPage(data: data)));
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DocumentationPage(data: data),
+                          ),
+                        );
                       }
                     },
                     icon: const Icon(Icons.arrow_forward),
@@ -982,11 +1112,15 @@ class FindingEditor extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-                width: 38,
-                child: Padding(
-                    padding: const EdgeInsets.only(top: 16),
-                    child: Text('${index + 1}.',
-                        style: const TextStyle(fontWeight: FontWeight.bold)))),
+              width: 38,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Text(
+                  '${index + 1}.',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
             Expanded(
               flex: 3,
               child: TextFormField(
@@ -1008,9 +1142,15 @@ class FindingEditor extends StatelessWidget {
                     : null,
                 decoration: const InputDecoration(labelText: 'PIC'),
                 items: staff
-                    .map((person) => DropdownMenuItem(
+                    .map(
+                      (person) => DropdownMenuItem(
                         value: person.id,
-                        child: Text(person.name, overflow: TextOverflow.ellipsis)))
+                        child: Text(
+                          person.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
                     .toList(),
                 onChanged: (value) {
                   finding.picId = value;
@@ -1036,16 +1176,20 @@ class FindingEditor extends StatelessWidget {
                 },
                 child: InputDecorator(
                   decoration: const InputDecoration(
-                      labelText: 'Target Waktu Penyelesaian'),
-                  child: Text(finding.target == null
-                      ? 'Pilih tanggal'
-                      : dates.format(finding.target!)),
+                    labelText: 'Target Waktu Penyelesaian',
+                  ),
+                  child: Text(
+                    finding.target == null
+                        ? 'Pilih tanggal'
+                        : dates.format(finding.target!),
+                  ),
                 ),
               ),
             ),
             IconButton(
-                onPressed: onRemove,
-                icon: const Icon(Icons.delete_outline, color: Colors.red)),
+              onPressed: onRemove,
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+            ),
           ],
         ),
       ),
@@ -1064,128 +1208,214 @@ class _DocumentationPageState extends State<DocumentationPage> {
   late Inspection data;
   List<String> images = [];
 
+  bool _isDragging = false;
+
+  Future<void> _addImageBytes(Uint8List bytes) async {
+    if (images.length >= 9) return;
+    setState(() {
+      images.add(base64Encode(bytes));
+    });
+  }
+
+  Future<void> _addFiles(List<XFile> files) async {
+    final available = 9 - images.length;
+    final selected = files.take(available);
+    for (final file in selected) {
+      final bytes = await file.readAsBytes();
+      await _addImageBytes(bytes);
+    }
+  }
+
+  Future<void> _pasteImage() async {
+    final bytes = await Pasteboard.image;
+    if (bytes != null) await _addImageBytes(bytes);
+  }
+
   @override
   void initState() {
     super.initState();
     data = widget.data;
   }
 
-  Future<void> addImages() async {
-    final result = await FilePicker.platform.pickFiles(
-        type: FileType.image, allowMultiple: true, withData: true);
-    if (result == null) return;
-    final available = 9 - images.length;
-    final selected = result.files.where((file) => file.bytes != null).take(available);
-    setState(() {
-      images.addAll(selected.map((file) => base64Encode(file.bytes!)));
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final unit = store.findUnit(data.unitId)?.name ?? '-';
-    return Scaffold(
-      appBar: AppBar(
-          title: const Text('Dokumentasi - Halaman 2'),
-          backgroundColor: navy,
-          foregroundColor: Colors.white),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1000),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SectionTitle('Dokumentasi Inspeksi'),
-                Text('Hari / Tanggal: ${dates.format(data.date)}'),
-                Text('Inspeksi BUJP ke Unit: $unit'),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Gambar ${images.length}/9',
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                    FilledButton.icon(
-                      onPressed: images.length >= 9 ? null : addImages,
-                      icon: const Icon(Icons.add_photo_alternate),
-                      label: const Text('Upload Gambar'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (images.isEmpty)
-                  const EmptyState('Belum ada gambar.')
-                else
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 260,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 1.25,
-                    ),
-                    itemCount: images.length,
-                    itemBuilder: (context, index) {
-                      return Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Card(
-                            clipBehavior: Clip.antiAlias,
-                            child: Image.memory(base64Decode(images[index]),
-                                fit: BoxFit.cover),
-                          ),
-                          Positioned(
-                            right: 4,
-                            top: 4,
-                            child: CircleAvatar(
-                              backgroundColor: Colors.white,
-                              child: IconButton(
-                                padding: EdgeInsets.zero,
-                                onPressed: () => setState(
-                                    () => images.removeAt(index)),
-                                icon: const Icon(Icons.close,
-                                    color: Colors.red, size: 18),
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyV, control: true):
+            _pasteImage,
+        const SingleActivator(LogicalKeyboardKey.keyV, meta: true): _pasteImage,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Dokumentasi - Halaman 2'),
+            backgroundColor: navy,
+            foregroundColor: Colors.white,
+          ),
+          body: DropTarget(
+            onDragEntered: (detail) => setState(() => _isDragging = true),
+            onDragExited: (detail) => setState(() => _isDragging = false),
+            onDragDone: (detail) {
+              setState(() => _isDragging = false);
+              _addFiles(detail.files);
+            },
+            child: Container(
+              color: _isDragging
+                  ? navy.withValues(alpha: 0.08)
+                  : Colors.transparent,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1000),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SectionTitle('Dokumentasi Inspeksi'),
+                        Text('Hari / Tanggal: ${dates.format(data.date)}'),
+                        Text('Inspeksi BUJP ke Unit: $unit'),
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Gambar ${images.length}/9 (Drag-drop / Ctrl+V)',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
+                            Row(
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: images.length >= 9
+                                      ? null
+                                      : _pasteImage,
+                                  icon: const Icon(Icons.content_paste),
+                                  label: const Text('Paste'),
+                                ),
+                                FilledButton.icon(
+                                  onPressed: images.length >= 9
+                                      ? null
+                                      : () async {
+                                          final result = await FilePicker
+                                              .platform
+                                              .pickFiles(
+                                                type: FileType.image,
+                                                allowMultiple: true,
+                                                withData: true,
+                                              );
+                                          if (result == null) return;
+                                          final files = result.files
+                                              .where((f) => f.bytes != null)
+                                              .map(
+                                                (f) => XFile.fromData(f.bytes!),
+                                              )
+                                              .toList();
+                                          await _addFiles(files);
+                                        },
+                                  icon: const Icon(Icons.add_photo_alternate),
+                                  label: const Text('Upload Gambar'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        if (images.isEmpty)
+                          const EmptyState(
+                            'Drop gambar di sini atau paste (Ctrl+V)',
+                          )
+                        else
+                          GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate:
+                                const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 260,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                  childAspectRatio: 1.25,
+                                ),
+                            itemCount: images.length,
+                            itemBuilder: (context, index) {
+                              return Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Card(
+                                    clipBehavior: Clip.antiAlias,
+                                    child: Image.memory(
+                                      base64Decode(images[index]),
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  Positioned(
+                                    right: 4,
+                                    top: 4,
+                                    child: CircleAvatar(
+                                      backgroundColor: Colors.white,
+                                      child: IconButton(
+                                        padding: EdgeInsets.zero,
+                                        onPressed: () => setState(
+                                          () => images.removeAt(index),
+                                        ),
+                                        icon: const Icon(
+                                          Icons.close,
+                                          color: Colors.red,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
-                        ],
-                      );
-                    },
-                  ),
-                const SizedBox(height: 28),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Wrap(
-                    spacing: 12,
-                    children: [
-                      OutlinedButton.icon(
-                          onPressed: () async {
-                            data.compositeImage = await combineImagesToGrid(images);
-                            if (context.mounted) openPdf(context, data);
-                          },
-                          icon: const Icon(Icons.picture_as_pdf),
-                          label: const Text('Preview PDF')),
-                      FilledButton.icon(
-                        onPressed: () async {
-                          data.compositeImage = await combineImagesToGrid(images);
-                          await store.saveInspection(data);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Inspeksi tersimpan')));
-                            Navigator.popUntil(context, (route) => route.isFirst);
-                          }
-                        },
-                        icon: const Icon(Icons.save),
-                        label: const Text('Simpan Inspeksi'),
-                      ),
-                    ],
+                        const SizedBox(height: 28),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Wrap(
+                            spacing: 12,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  data.compositeImage =
+                                      await combineImagesToGrid(images);
+                                  if (context.mounted) openPdf(context, data);
+                                },
+                                icon: const Icon(Icons.picture_as_pdf),
+                                label: const Text('Preview PDF'),
+                              ),
+                              FilledButton.icon(
+                                onPressed: () async {
+                                  data.compositeImage =
+                                      await combineImagesToGrid(images);
+                                  await store.saveInspection(data);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Inspeksi tersimpan'),
+                                      ),
+                                    );
+                                    Navigator.popUntil(
+                                      context,
+                                      (route) => route.isFirst,
+                                    );
+                                  }
+                                },
+                                icon: const Icon(Icons.save),
+                                label: const Text('Simpan Inspeksi'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -1199,11 +1429,16 @@ class SectionTitle extends StatelessWidget {
   const SectionTitle(this.text, {super.key});
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 14),
-        child: Text(text,
-            style: const TextStyle(
-                fontSize: 21, fontWeight: FontWeight.bold, color: navy)),
-      );
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 21,
+        fontWeight: FontWeight.bold,
+        color: navy,
+      ),
+    ),
+  );
 }
 
 class EmptyState extends StatelessWidget {
@@ -1211,19 +1446,26 @@ class EmptyState extends StatelessWidget {
   const EmptyState(this.text, {super.key});
   @override
   Widget build(BuildContext context) => Center(
-      child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Text(text, style: const TextStyle(color: Colors.grey))));
+    child: Padding(
+      padding: const EdgeInsets.all(40),
+      child: Text(text, style: const TextStyle(color: Colors.grey)),
+    ),
+  );
 }
 
 Future<Uint8List?> pickImage() async {
-  final result = await FilePicker.platform
-      .pickFiles(type: FileType.image, withData: true);
+  final result = await FilePicker.platform.pickFiles(
+    type: FileType.image,
+    withData: true,
+  );
   return result?.files.single.bytes;
 }
 
 Future<void> deleteConfirm(
-    BuildContext context, String label, Future<void> Function() action) async {
+  BuildContext context,
+  String label,
+  Future<void> Function() action,
+) async {
   final result = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
@@ -1231,11 +1473,13 @@ Future<void> deleteConfirm(
       content: Text('Hapus $label?'),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Batal')),
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Batal'),
+        ),
         FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Hapus')),
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Hapus'),
+        ),
       ],
     ),
   );
@@ -1249,8 +1493,9 @@ void showInfo(BuildContext context, String text) {
       content: Text(text),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Tutup')),
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Tutup'),
+        ),
       ],
     ),
   );
@@ -1259,14 +1504,17 @@ void showInfo(BuildContext context, String text) {
 Future<String> combineImagesToGrid(List<String> base64Images) async {
   if (base64Images.isEmpty) return '';
 
-  final decodedImages = base64Images.map((b64) {
-    try {
-      final bytes = base64Decode(b64);
-      return img.decodeImage(bytes);
-    } catch (_) {
-      return null;
-    }
-  }).whereType<img.Image>().toList();
+  final decodedImages = base64Images
+      .map((b64) {
+        try {
+          final bytes = base64Decode(b64);
+          return img.decodeImage(bytes);
+        } catch (_) {
+          return null;
+        }
+      })
+      .whereType<img.Image>()
+      .toList();
 
   if (decodedImages.isEmpty) return '';
 
@@ -1343,8 +1591,9 @@ Future<String> combineImagesToGrid(List<String> base64Images) async {
     final bool isLoneLast = totalImages % cols == 1 && i == totalImages - 1;
     final int x = isLoneLast
         ? (canvasWidth - resized.width) ~/ 2
-        : gridGap + column * (cellWidth + gridGap) +
-            (cellWidth - resized.width) ~/ 2;
+        : gridGap +
+              column * (cellWidth + gridGap) +
+              (cellWidth - resized.width) ~/ 2;
     final int centeredY = y + (cellHeight - resized.height) ~/ 2;
 
     img.compositeImage(canvas, resized, dstX: x, dstY: centeredY);
@@ -1356,20 +1605,34 @@ Future<String> combineImagesToGrid(List<String> base64Images) async {
 Future<void> openPdf(BuildContext context, Inspection inspection) async {
   final bytes = await buildPdf(inspection, StoreScope.of(context));
   if (!context.mounted) return;
-  Navigator.push(context,
-      MaterialPageRoute(builder: (_) => PdfPage(bytes: bytes)));
+  Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => PdfPage(bytes: bytes)),
+  );
 }
 
 pw.Widget _pdfInfoRow(String number, String label, String value) {
   return pw.Row(
     children: [
-      pw.SizedBox(width: 15, child: pw.Text(number, style: const pw.TextStyle(fontSize: 10))),
-      pw.SizedBox(width: 140, child: pw.Text(label, style: const pw.TextStyle(fontSize: 10))),
-      pw.SizedBox(width: 15, child: pw.Text(':', style: const pw.TextStyle(fontSize: 10))),
-      pw.Expanded(child: pw.Text(value, style: const pw.TextStyle(fontSize: 10))),
+      pw.SizedBox(
+        width: 15,
+        child: pw.Text(number, style: const pw.TextStyle(fontSize: 10)),
+      ),
+      pw.SizedBox(
+        width: 140,
+        child: pw.Text(label, style: const pw.TextStyle(fontSize: 10)),
+      ),
+      pw.SizedBox(
+        width: 15,
+        child: pw.Text(':', style: const pw.TextStyle(fontSize: 10)),
+      ),
+      pw.Expanded(
+        child: pw.Text(value, style: const pw.TextStyle(fontSize: 10)),
+      ),
     ],
   );
 }
+
 Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
   final document = pw.Document();
   final unit = store.findUnit(data.unitId)?.name ?? '-';
@@ -1378,7 +1641,8 @@ Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
   final signerStaff = store.findStaff(data.picSignerId);
   final signerName = signerStaff?.name ?? '';
   final signerPosition = signerStaff?.position ?? '';
-  const note = '1. Kolom Temuan :\n'
+  const note =
+      '1. Kolom Temuan :\n'
       '   Temuan yang didapatkan oleh Manajemen BUJP\n'
       '2. Kolom PIC :\n'
       '   Penanggung jawab yang mendapatkan disposisi dari Manajemen BUJP\n'
@@ -1395,16 +1659,23 @@ Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
       build: (context) {
         final rows = <pw.TableRow>[
           pw.TableRow(
-            decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFEFEFEF)),
+            decoration: const pw.BoxDecoration(
+              color: PdfColor.fromInt(0xFFEFEFEF),
+            ),
             verticalAlignment: pw.TableCellVerticalAlignment.middle,
             children: ['NO', 'Temuan', 'PIC', 'Target Waktu\nPenyelesaian']
-                .map((title) => pw.Padding(
-                      padding: const pw.EdgeInsets.all(8),
-                      child: pw.Center(
-                          child: pw.Text(title,
-                              textAlign: pw.TextAlign.center,
-                              style: pw.TextStyle(font: bold, fontSize: 9))),
-                    ))
+                .map(
+                  (title) => pw.Padding(
+                    padding: const pw.EdgeInsets.all(8),
+                    child: pw.Center(
+                      child: pw.Text(
+                        title,
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(font: bold, fontSize: 9),
+                      ),
+                    ),
+                  ),
+                )
                 .toList(),
           ),
         ];
@@ -1412,32 +1683,65 @@ Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
         for (var index = 0; index < data.findings.length; index++) {
           final finding = data.findings[index];
           final picStaff = store.findStaff(finding.picId);
-          final picText = picStaff == null ? '' : (picStaff.position.isNotEmpty ? picStaff.position : picStaff.name);
-          rows.add(pw.TableRow(children: [
-            pw.Padding(
-                padding: const pw.EdgeInsets.all(8),
-                child: pw.Center(child: pw.Text('${index + 1}.', style: const pw.TextStyle(fontSize: 9)))),
-            pw.Padding(
-                padding: const pw.EdgeInsets.all(8),
-                child: pw.Text(finding.text, style: const pw.TextStyle(fontSize: 9))),
-            pw.Padding(
-                padding: const pw.EdgeInsets.all(8),
-                child: pw.Center(child: pw.Text(picText, style: const pw.TextStyle(fontSize: 9)))),
-            pw.Padding(
-                padding: const pw.EdgeInsets.all(8),
-                child: pw.Center(child: pw.Text(
-                    finding.target == null ? '' : dates.format(finding.target!),
-                    style: const pw.TextStyle(fontSize: 9)))),
-          ]));
+          final picText = picStaff == null
+              ? ''
+              : (picStaff.position.isNotEmpty
+                    ? picStaff.position
+                    : picStaff.name);
+          rows.add(
+            pw.TableRow(
+              children: [
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Center(
+                    child: pw.Text(
+                      '${index + 1}.',
+                      style: const pw.TextStyle(fontSize: 9),
+                    ),
+                  ),
+                ),
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Text(
+                    finding.text,
+                    style: const pw.TextStyle(fontSize: 9),
+                  ),
+                ),
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Center(
+                    child: pw.Text(
+                      picText,
+                      style: const pw.TextStyle(fontSize: 9),
+                    ),
+                  ),
+                ),
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Center(
+                    child: pw.Text(
+                      finding.target == null
+                          ? ''
+                          : dates.format(finding.target!),
+                      style: const pw.TextStyle(fontSize: 9),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
         }
 
         return pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
             pw.Center(
-                child: pw.Text('INSPEKSI KEAMANAN\nBADAN USAHA JASA PENGAMANAN',
-                    textAlign: pw.TextAlign.center,
-                    style: pw.TextStyle(font: bold, fontSize: 15))),
+              child: pw.Text(
+                'INSPEKSI KEAMANAN\nBADAN USAHA JASA PENGAMANAN',
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(font: bold, fontSize: 15),
+              ),
+            ),
             pw.SizedBox(height: 18),
             _pdfInfoRow('1.', 'Hari/Tanggal', fullDates.format(data.date)),
             _pdfInfoRow('2.', 'Inspeksi BUJP ke Unit', unit),
@@ -1456,13 +1760,19 @@ Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
               ),
             ),
             pw.SizedBox(height: 12),
-            pw.Text('Catatan Temuan :', style: pw.TextStyle(font: bold, fontSize: 10)),
+            pw.Text(
+              'Catatan Temuan :',
+              style: pw.TextStyle(font: bold, fontSize: 10),
+            ),
             pw.Container(
               width: double.infinity,
               height: 112,
               padding: const pw.EdgeInsets.all(8),
               decoration: pw.BoxDecoration(border: pw.Border.all(width: 1.0)),
-              child: pw.Text(data.notes, style: const pw.TextStyle(fontSize: 9)),
+              child: pw.Text(
+                data.notes,
+                style: const pw.TextStyle(fontSize: 9),
+              ),
             ),
             pw.SizedBox(height: 24),
             pw.Expanded(
@@ -1470,25 +1780,35 @@ Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Expanded(
-                      flex: 5,
-                      child: pw.Text(note,
-                          style: const pw.TextStyle(fontSize: 7.2, lineSpacing: 2))),
+                    flex: 5,
+                    child: pw.Text(
+                      note,
+                      style: const pw.TextStyle(fontSize: 7.2, lineSpacing: 2),
+                    ),
+                  ),
                   pw.Expanded(
                     flex: 4,
                     child: pw.Column(
                       children: [
                         pw.Text('Mengetahui,'),
                         pw.SizedBox(height: 3),
-                        pw.Text(store.companyName,
-                            style: pw.TextStyle(font: bold, fontSize: 9),
-                            textAlign: pw.TextAlign.center),
+                        pw.Text(
+                          store.companyName,
+                          style: pw.TextStyle(font: bold, fontSize: 9),
+                          textAlign: pw.TextAlign.center,
+                        ),
                         pw.SizedBox(height: 50),
                         if (data.signature != null)
-                          pw.Image(pw.MemoryImage(base64Decode(data.signature!)),
-                              height: 80, fit: pw.BoxFit.contain),
+                          pw.Image(
+                            pw.MemoryImage(base64Decode(data.signature!)),
+                            height: 80,
+                            fit: pw.BoxFit.contain,
+                          ),
                         pw.SizedBox(height: 5),
-                        pw.Text(signerName.isEmpty ? '________________' : signerName,
-                            style: pw.TextStyle(font: bold, fontSize: 9)),
+                        pw.Text(
+                          signerName.isEmpty ? '________________' : signerName,
+                          style: pw.TextStyle(font: bold, fontSize: 9),
+                        ),
                       ],
                     ),
                   ),
@@ -1511,17 +1831,23 @@ Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
             pw.Center(
-                child: pw.Text(
-                    'DOKUMENTASI INSPEKSI KEAMANAN\nBADAN USAHA JASA PENGAMANAN',
-                    textAlign: pw.TextAlign.center,
-                    style: pw.TextStyle(font: bold, fontSize: 15))),
+              child: pw.Text(
+                'DOKUMENTASI INSPEKSI KEAMANAN\nBADAN USAHA JASA PENGAMANAN',
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(font: bold, fontSize: 15),
+              ),
+            ),
             pw.SizedBox(height: 14),
             _pdfInfoRow('1.', 'Hari/Tanggal', fullDates.format(data.date)),
             pw.SizedBox(height: 4),
             _pdfInfoRow('2.', 'Inspeksi BUJP ke Unit', unit),
             pw.SizedBox(height: 14),
             if (data.compositeImage.isEmpty)
-              pw.Expanded(child: pw.Center(child: pw.Text('Tidak ada gambar dokumentasi.')))
+              pw.Expanded(
+                child: pw.Center(
+                  child: pw.Text('Tidak ada gambar dokumentasi.'),
+                ),
+              )
             else
               pw.Container(
                 width: double.infinity,
@@ -1549,9 +1875,10 @@ class PdfPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-          title: const Text('Preview PDF'),
-          backgroundColor: navy,
-          foregroundColor: Colors.white),
+        title: const Text('Preview PDF'),
+        backgroundColor: navy,
+        foregroundColor: Colors.white,
+      ),
       body: PdfPreview(
         build: (_) async => bytes,
         canChangePageFormat: false,
