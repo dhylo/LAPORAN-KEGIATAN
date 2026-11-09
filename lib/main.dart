@@ -1,5 +1,8 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/gestures.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +19,75 @@ import 'package:pasteboard/pasteboard.dart';
 
 const navy = Color(0xFF12345B);
 const blue = Color(0xFF1D70B8);
+
+const _pdfSigSlotW = 225.0;
+const _pdfSigSlotH = 112.0;
+const _pdfSigImageW = 150.0;
+const _pdfSigImageH = 75.0;
+const _sigMinScale = 0.5;
+const _sigMaxScale = 1.25;
+// Fixed name position inside signature slot. Signature moves above it.
+const _sigNameTop = 100.0;
+const _sigFooterH = 170.0;
+
+const _pdfPageW = 595.28;
+const _pdfPagePadLeft = 42.0;
+const _pdfPagePadTop = 35.0;
+const _pdfPagePadRight = 42.0;
+const _pdfContentW = _pdfPageW - _pdfPagePadLeft - _pdfPagePadRight;
+
+double _pdfRowHeight(int findingCount) {
+  return findingCount <= 3
+      ? 108.0
+      : (324.0 / findingCount).clamp(48.0, 108.0);
+}
+
+double _signatureFooterTop(int findingCount) {
+  // Fixed heights of page-1 content above the footer block.
+  return _pdfPagePadTop +
+      36.0 +
+      18.0 +
+      24.0 +
+      14.0 +
+      25.0 +
+      findingCount * _pdfRowHeight(findingCount) +
+      12.0 +
+      12.0 +
+      112.0 +
+      24.0;
+}
+
+/// Signature slot position in PDF points. Same layout used by editor marker.
+double _signatureSlotTop(int findingCount) {
+  return _signatureFooterTop(findingCount) + 33.0;
+}
+
+double _signatureSlotLeft() {
+  final rightColLeft = _pdfPagePadLeft + _pdfContentW * 5 / 9;
+  final rightColW = _pdfContentW * 4 / 9;
+  return rightColLeft + (rightColW - _pdfSigSlotW) / 2;
+}
+
+const _signatureRasterDpi = 110.0;
+
+List<double> _signatureImageSize(String? encoded, double scale) {
+  const fallbackRatio = _pdfSigImageW / _pdfSigImageH;
+  var ratio = fallbackRatio;
+  if (encoded != null && encoded.isNotEmpty) {
+    try {
+      final decoded = img.decodeImage(base64Decode(encoded));
+      if (decoded != null && decoded.height > 0) {
+        ratio = decoded.width / decoded.height;
+      }
+    } catch (_) {
+      ratio = fallbackRatio;
+    }
+  }
+  final baseW = ratio >= fallbackRatio ? _pdfSigImageW : _pdfSigImageH * ratio;
+  final baseH = baseW / ratio;
+  return [baseW * scale, baseH * scale];
+}
+
 final dates = DateFormat('dd/MM/yyyy');
 final fullDates = DateFormat('EEEE, dd MMMM yyyy', 'id_ID');
 
@@ -25,6 +97,23 @@ void main() async {
   final store = AppStore(await SharedPreferences.getInstance());
   await store.load();
   runApp(App(store: store));
+}
+
+class _MacScrollBehavior extends MaterialScrollBehavior {
+  const _MacScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+    PointerDeviceKind.stylus,
+  };
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) {
+    return const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+  }
 }
 
 class App extends StatelessWidget {
@@ -38,10 +127,24 @@ class App extends StatelessWidget {
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         title: 'Inspeksi & Monitoring',
+        scrollBehavior: const _MacScrollBehavior(),
         theme: ThemeData(
           useMaterial3: true,
+          fontFamily: 'Segoe UI',
           colorScheme: ColorScheme.fromSeed(seedColor: navy),
           scaffoldBackgroundColor: const Color(0xFFF5F7FA),
+          splashFactory: NoSplash.splashFactory,
+          pageTransitionsTheme: const PageTransitionsTheme(
+            builders: {
+              TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
+              TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+            },
+          ),
+          appBarTheme: const AppBarTheme(
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            surfaceTintColor: Colors.transparent,
+          ),
           inputDecorationTheme: const InputDecorationTheme(
             filled: true,
             fillColor: Colors.white,
@@ -130,6 +233,13 @@ class Inspection {
   String? picSignerId;
   String? signature;
   String compositeImage;
+  double? sigX;
+  double? sigY;
+  double? sigW;
+  bool sigAbsolute;
+  bool signatureCropped;
+  bool sigPosV2;
+  int sigLayoutVersion;
 
   Inspection({
     required this.id,
@@ -140,6 +250,13 @@ class Inspection {
     this.picSignerId,
     this.signature,
     this.compositeImage = '',
+    this.sigX,
+    this.sigY,
+    this.sigW,
+    this.sigAbsolute = false,
+    this.signatureCropped = false,
+    this.sigPosV2 = false,
+    this.sigLayoutVersion = 0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -151,6 +268,13 @@ class Inspection {
     'picSignerId': picSignerId,
     'signature': signature,
     'compositeImage': compositeImage,
+    'sigX': sigX,
+    'sigY': sigY,
+    'sigW': sigW,
+    'sigAbsolute': sigAbsolute,
+    'signatureCropped': signatureCropped,
+    'sigPosV2': sigPosV2,
+    'sigLayoutVersion': sigLayoutVersion,
   };
 
   factory Inspection.fromJson(Map<String, dynamic> json) {
@@ -166,6 +290,13 @@ class Inspection {
       picSignerId: json['picSignerId'] as String?,
       signature: json['signature'] as String?,
       compositeImage: (json['compositeImage'] ?? '') as String,
+      sigX: json['sigX'] as double?,
+      sigY: json['sigY'] as double?,
+      sigW: json['sigW'] as double?,
+      sigAbsolute: json['sigAbsolute'] as bool? ?? false,
+      signatureCropped: json['signatureCropped'] as bool? ?? false,
+      sigPosV2: json['sigPosV2'] as bool? ?? false,
+      sigLayoutVersion: json['sigLayoutVersion'] as int? ?? 0,
     );
   }
 }
@@ -303,7 +434,7 @@ class HomePage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inspeksi & Monitoring'),
+        title: const Text('Inspeksi, Monitoring & Laporang'),
         backgroundColor: navy,
         foregroundColor: Colors.white,
       ),
@@ -889,16 +1020,6 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
     if (result != null) setState(() => data.date = result);
   }
 
-  Future<void> chooseSignature() async {
-    final result = await pickImage();
-    if (result != null) {
-      setState(() {
-        data.signature = base64Encode(result);
-        if (selectedSignerId != null) data.picSignerId = selectedSignerId;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
@@ -1019,33 +1140,18 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
                       ),
                     ),
                     const SizedBox(width: 18),
-                    Expanded(
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'TTD digital',
+                          Text(
+                            'Tanda Tangan Digital',
                             style: TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: chooseSignature,
-                                icon: const Icon(Icons.upload_file),
-                                label: const Text('Upload TTD'),
-                              ),
-                              if (data.signature != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 14),
-                                  child: Image.memory(
-                                    base64Decode(data.signature!),
-                                    width: 110,
-                                    height: 60,
-                                    fit: BoxFit.contain,
-                                  ),
-                                ),
-                            ],
+                          SizedBox(height: 8),
+                          Text(
+                            'Upload & atur posisi tanda tangan dilakukan di halaman Preview PDF.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                         ],
                       ),
@@ -1458,7 +1564,50 @@ Future<Uint8List?> pickImage() async {
     type: FileType.image,
     withData: true,
   );
-  return result?.files.single.bytes;
+  final bytes = result?.files.single.bytes;
+  if (bytes == null) return null;
+
+  // Auto-crop white margins
+  final image = img.decodeImage(bytes);
+  if (image == null) return bytes;
+
+  var minX = image.width;
+  var minY = image.height;
+  var maxX = -1;
+  var maxY = -1;
+
+  for (var y = 0; y < image.height; y++) {
+    for (var x = 0; x < image.width; x++) {
+      final pixel = image.getPixel(x, y);
+      // If not near-white (assuming 240+ is white-ish)
+      if (pixel.r < 245 || pixel.g < 245 || pixel.b < 245) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (maxX == -1) return bytes; // All white?
+
+  // Add 2% padding
+  final padW = (image.width * 0.02).toInt();
+  final padH = (image.height * 0.02).toInt();
+
+  final cropX = (minX - padW).clamp(0, image.width - 1);
+  final cropY = (minY - padH).clamp(0, image.height - 1);
+  final cropW = (maxX - minX + 1 + padW * 2).clamp(1, image.width - cropX);
+  final cropH = (maxY - minY + 1 + padH * 2).clamp(1, image.height - cropY);
+
+  final cropped = img.copyCrop(
+    image,
+    x: cropX,
+    y: cropY,
+    width: cropW,
+    height: cropH,
+  );
+  return Uint8List.fromList(img.encodePng(cropped));
 }
 
 Future<void> deleteConfirm(
@@ -1603,11 +1752,14 @@ Future<String> combineImagesToGrid(List<String> base64Images) async {
 }
 
 Future<void> openPdf(BuildContext context, Inspection inspection) async {
-  final bytes = await buildPdf(inspection, StoreScope.of(context));
+  final store = StoreScope.of(context);
+  final bytes = await buildPdf(inspection, store);
   if (!context.mounted) return;
   Navigator.push(
     context,
-    MaterialPageRoute(builder: (_) => PdfPage(bytes: bytes)),
+    MaterialPageRoute(
+      builder: (_) => PdfPage(bytes: bytes, data: inspection, store: store),
+    ),
   );
 }
 
@@ -1633,28 +1785,56 @@ pw.Widget _pdfInfoRow(String number, String label, String value) {
   );
 }
 
-Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
+pw.Widget _noteItem(String title, String desc) {
+  return pw.Padding(
+    padding: const pw.EdgeInsets.only(bottom: 2),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(title, style: pw.TextStyle(font: pw.Font.helveticaBold(), fontSize: 6)),
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(left: 12),
+          child: pw.Text(desc, style: const pw.TextStyle(fontSize: 6)),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<Uint8List> buildPdf(
+  Inspection data,
+  AppStore store, {
+  bool includeSignature = true,
+}) async {
   final document = pw.Document();
   final unit = store.findUnit(data.unitId)?.name ?? '-';
   final normal = pw.Font.helvetica();
   final bold = pw.Font.helveticaBold();
   final signerStaff = store.findStaff(data.picSignerId);
   final signerName = signerStaff?.name ?? '';
-  final signerPosition = signerStaff?.position ?? '';
-  const note =
-      '1. Kolom Temuan :\n'
-      '   Temuan yang didapatkan oleh Manajemen BUJP\n'
-      '2. Kolom PIC :\n'
-      '   Penanggung jawab yang mendapatkan disposisi dari Manajemen BUJP\n'
-      '3. Kolom Target Waktu Penyelesaian :\n'
-      '   Tanggal temuan selesai ditindaklanjuti\n'
-      '4. Catatan temuan :\n'
-      '   Di isi dengan keterangan temuan';
+
+  final n = data.findings.length;
+  final rowH = _pdfRowHeight(n);
+  final sigScale = (data.sigW ?? 1.0).clamp(_sigMinScale, _sigMaxScale).toDouble();
+  final sigSize = _signatureImageSize(data.signature, sigScale);
+  final sigImageW = sigSize[0];
+  final sigImageH = sigSize[1];
+  final sigX = (data.sigLayoutVersion >= 5 ? (data.sigX ?? 0.5) : 0.5)
+      .clamp(0.0, 1.0)
+      .toDouble();
+  final sigY = (data.sigLayoutVersion >= 5 ? (data.sigY ?? 1.0) : 1.0)
+      .clamp(0.0, 1.0)
+      .toDouble();
+  final sigSlotLeft = _signatureSlotLeft();
+  final sigSlotTop = _signatureSlotTop(n);
+  final sigMoveH = (_sigNameTop - sigImageH).clamp(0.0, _pdfSigSlotH - sigImageH);
+  final sigLeft = sigSlotLeft + sigX * (_pdfSigSlotW - sigImageW);
+  final sigTop = sigSlotTop + sigY * sigMoveH;
 
   document.addPage(
     pw.Page(
       pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.fromLTRB(42, 35, 42, 30),
+      margin: pw.EdgeInsets.zero,
       theme: pw.ThemeData.withFont(base: normal, bold: bold),
       build: (context) {
         final rows = <pw.TableRow>[
@@ -1665,8 +1845,8 @@ Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
             verticalAlignment: pw.TableCellVerticalAlignment.middle,
             children: ['NO', 'Temuan', 'PIC', 'Target Waktu\nPenyelesaian']
                 .map(
-                  (title) => pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
+                  (title) => pw.SizedBox(
+                    height: 25,
                     child: pw.Center(
                       child: pw.Text(
                         title,
@@ -1686,13 +1866,13 @@ Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
           final picText = picStaff == null
               ? ''
               : (picStaff.position.isNotEmpty
-                    ? picStaff.position
-                    : picStaff.name);
+                  ? picStaff.position
+                  : picStaff.name);
           rows.add(
             pw.TableRow(
               children: [
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(8),
+                pw.SizedBox(
+                  height: rowH,
                   child: pw.Center(
                     child: pw.Text(
                       '${index + 1}.',
@@ -1700,29 +1880,37 @@ Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
                     ),
                   ),
                 ),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(8),
-                  child: pw.Text(
-                    finding.text,
-                    style: const pw.TextStyle(fontSize: 9),
-                  ),
-                ),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(8),
-                  child: pw.Center(
-                    child: pw.Text(
-                      picText,
-                      style: const pw.TextStyle(fontSize: 9),
+                pw.SizedBox(
+                  height: rowH,
+                  child: pw.Align(
+                    alignment: pw.Alignment.centerLeft,
+                    child: pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text(
+                        finding.text,
+                        style: const pw.TextStyle(fontSize: 9),
+                      ),
                     ),
                   ),
                 ),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(8),
+                pw.SizedBox(
+                  height: rowH,
+                  child: pw.Center(
+                    child: pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 4),
+                      child: pw.Text(
+                        picText,
+                        textAlign: pw.TextAlign.center,
+                        style: const pw.TextStyle(fontSize: 9),
+                      ),
+                    ),
+                  ),
+                ),
+                pw.SizedBox(
+                  height: rowH,
                   child: pw.Center(
                     child: pw.Text(
-                      finding.target == null
-                          ? ''
-                          : dates.format(finding.target!),
+                      finding.target == null ? '' : dates.format(finding.target!),
                       style: const pw.TextStyle(fontSize: 9),
                     ),
                   ),
@@ -1732,9 +1920,11 @@ Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
           );
         }
 
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-          children: [
+        final pageContent = pw.Padding(
+          padding: const pw.EdgeInsets.fromLTRB(42, 35, 42, 30),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
             pw.Center(
               child: pw.Text(
                 'INSPEKSI KEAMANAN\nBADAN USAHA JASA PENGAMANAN',
@@ -1746,18 +1936,15 @@ Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
             _pdfInfoRow('1.', 'Hari/Tanggal', fullDates.format(data.date)),
             _pdfInfoRow('2.', 'Inspeksi BUJP ke Unit', unit),
             pw.SizedBox(height: 14),
-            pw.Container(
-              width: double.infinity,
-              child: pw.Table(
-                border: pw.TableBorder.all(width: 1.0),
-                columnWidths: {
-                  0: const pw.FlexColumnWidth(0.5),
-                  1: const pw.FlexColumnWidth(2.5),
-                  2: const pw.FlexColumnWidth(1.5),
-                  3: const pw.FlexColumnWidth(1.5),
-                },
-                children: rows,
-              ),
+            pw.Table(
+              border: pw.TableBorder.all(width: 1.0),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(0.5),
+                1: const pw.FlexColumnWidth(2.5),
+                2: const pw.FlexColumnWidth(1.5),
+                3: const pw.FlexColumnWidth(1.5),
+              },
+              children: rows,
             ),
             pw.SizedBox(height: 12),
             pw.Text(
@@ -1775,46 +1962,81 @@ Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
               ),
             ),
             pw.SizedBox(height: 24),
-            pw.Expanded(
+            pw.SizedBox(
+              height: _sigFooterH,
               child: pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Expanded(
-                    flex: 5,
-                    child: pw.Text(
-                      note,
-                      style: const pw.TextStyle(fontSize: 7.2, lineSpacing: 2),
-                    ),
+                pw.Expanded(
+                  flex: 5,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Keterangan :', style: pw.TextStyle(font: bold, fontSize: 6)),
+                      pw.SizedBox(height: 4),
+                      _noteItem('1. Kolom Temuan :', 'Temuan yang didapatkan oleh Manajemen BUJP'),
+                      _noteItem('2. Kolom PIC :', 'Penanggung jawab yang mendapatkan disposisi dari Manajemen BUJP'),
+                      _noteItem('3. Kolom Target Waktu Penyelesaian :', 'Tanggal temuan selesai ditindaklanjuti'),
+                      _noteItem('4. Catatan temuan :', 'Di isi dengan keterangan temuan'),
+                    ],
                   ),
-                  pw.Expanded(
-                    flex: 4,
-                    child: pw.Column(
-                      children: [
-                        pw.Text('Mengetahui,'),
-                        pw.SizedBox(height: 3),
-                        pw.Text(
-                          store.companyName,
-                          style: pw.TextStyle(font: bold, fontSize: 9),
-                          textAlign: pw.TextAlign.center,
-                        ),
-                        pw.SizedBox(height: 50),
-                        if (data.signature != null)
-                          pw.Image(
-                            pw.MemoryImage(base64Decode(data.signature!)),
-                            height: 80,
-                            fit: pw.BoxFit.contain,
-                          ),
-                        pw.SizedBox(height: 5),
-                        pw.Text(
-                          signerName.isEmpty ? '________________' : signerName,
-                          style: pw.TextStyle(font: bold, fontSize: 9),
-                        ),
-                      ],
-                    ),
+                ),
+                pw.Expanded(
+                  flex: 4,
+                  child: pw.Column(
+                    children: [
+                      pw.Text('Mengetahui,', style: const pw.TextStyle(fontSize: 9)),
+                      pw.SizedBox(height: 3),
+                      pw.Text(
+                        store.companyName,
+                        style: pw.TextStyle(font: bold, fontSize: 9),
+                        textAlign: pw.TextAlign.center,
+                      ),
+                      pw.SizedBox(height: 8),
+                      pw.SizedBox(
+                        width: _pdfSigSlotW,
+                        height: _pdfSigSlotH,
+                      ),
+                      pw.SizedBox(height: 2),
+                    ],
                   ),
+                ),
                 ],
               ),
             ),
+            ],
+          ),
+        );
+        return pw.Stack(
+          children: [
+            pw.Positioned.fill(child: pageContent),
+            if (includeSignature && data.signature != null)
+              pw.Positioned(
+                left: sigLeft,
+                top: sigTop,
+                child: pw.SizedBox(
+                  width: sigImageW,
+                  height: sigImageH,
+                  child: pw.Image(
+                    pw.MemoryImage(base64Decode(data.signature!)),
+                    fit: pw.BoxFit.contain,
+                  ),
+                ),
+              ),
+            if (includeSignature &&
+                (signerName.isNotEmpty || data.signature != null))
+              pw.Positioned(
+                left: sigSlotLeft,
+                top: sigSlotTop + _sigNameTop,
+                child: pw.SizedBox(
+                  width: _pdfSigSlotW,
+                  child: pw.Text(
+                    signerName.isEmpty ? '________________' : signerName,
+                    textAlign: pw.TextAlign.center,
+                    style: pw.TextStyle(font: bold, fontSize: 9),
+                  ),
+                ),
+              ),
           ],
         );
       },
@@ -1867,23 +2089,309 @@ Future<Uint8List> buildPdf(Inspection data, AppStore store) async {
   return document.save();
 }
 
-class PdfPage extends StatelessWidget {
+class PdfPage extends StatefulWidget {
   final Uint8List bytes;
-  const PdfPage({super.key, required this.bytes});
+  final Inspection data;
+  final AppStore store;
+  const PdfPage({super.key, required this.bytes, required this.data, required this.store});
+
+  @override
+  State<PdfPage> createState() => _PdfPageState();
+}
+
+class _PdfPageState extends State<PdfPage> {
+  int _rev = 0;
+  bool _editingSig = false;
+  ImageProvider? _page1Image;
+  double _sigX = 0;
+  double _sigY = 0;
+  double _sigW = 1.0;
+  double _rasterWidthPx = 1240;
+  double _rasterHeightPx = 1754;
+  double _sigStartW = 1.0;
+  late Uint8List _currentBytes;
+
+  // Reference area size for signature positioning (matches PDF Stack: 150x80)
+
+  @override
+  void initState() {
+    super.initState();
+    _currentBytes = widget.bytes;
+    _sigW = (widget.data.sigW ?? 1.0).clamp(_sigMinScale, _sigMaxScale).toDouble();
+    final useSavedPosition = widget.data.sigAbsolute &&
+        widget.data.sigPosV2 &&
+        widget.data.sigLayoutVersion >= 5;
+    _sigX = useSavedPosition ? (widget.data.sigX ?? 0.5) : 0.5;
+    _sigY = useSavedPosition ? (widget.data.sigY ?? 1.0) : 1.0;
+  }
+
+  Future<void> _pickAndSetSignature() async {
+    final result = await pickImage();
+    if (result != null) {
+      widget.data.signature = base64Encode(result);
+      _sigW = 1.0;
+      _sigX = 0.5;
+      _sigY = 1.0;
+      widget.data.sigX = _sigX;
+      widget.data.sigY = _sigY;
+      widget.data.sigW = _sigW;
+      widget.data.sigPosV2 = true;
+      widget.data.sigLayoutVersion = 5;
+      await widget.store.saveInspection(widget.data);
+      // Build PDF tanpa TTD sebagai latar editor.
+      final newBytes = await buildPdf(widget.data, widget.store, includeSignature: false);
+      if (!mounted) return;
+      setState(() {
+        _currentBytes = newBytes;
+        _rev++;
+      });
+      await _enterEditMode();
+    }
+  }
+
+  Future<void> _enterEditMode() async {
+    if (widget.data.signature == null) {
+      await _pickAndSetSignature();
+      return;
+    }
+    if (!widget.data.sigAbsolute ||
+        !widget.data.sigPosV2 ||
+        widget.data.sigLayoutVersion < 5) {
+      _sigX = 0.5;
+      _sigY = 1.0;
+    }
+    setState(() => _editingSig = true);
+    // Build PDF tanpa TTD sebagai latar editor.
+    final cleanBytes = await buildPdf(widget.data, widget.store, includeSignature: false);
+    setState(() => _currentBytes = cleanBytes);
+    await _rasterizePage1();
+  }
+
+  Future<void> _rasterizePage1() async {
+    try {
+      await for (final page in Printing.raster(
+        _currentBytes,
+        pages: [0],
+        dpi: _signatureRasterDpi,
+      )) {
+        final png = await page.toPng();
+        final raster = img.decodeImage(png);
+        if (raster != null) {
+          _rasterWidthPx = raster.width.toDouble();
+          _rasterHeightPx = raster.height.toDouble();
+        }
+        if (mounted) {
+          setState(() {
+            _page1Image = MemoryImage(png);
+          });
+        }
+        break;
+      }
+    } catch (_) {
+      if (mounted) {
+        showInfo(context, 'Raster PDF tidak didukung di platform ini.');
+        setState(() => _editingSig = false);
+      }
+    }
+  }
+
+  Future<void> _resetSig() async {
+    setState(() {
+      _sigW = 1.0;
+      _sigX = 0.5;
+      _sigY = 1.0;
+    });
+  }
+
+  Future<void> _saveSig() async {
+    widget.data.sigX = _sigX;
+    widget.data.sigY = _sigY;
+    widget.data.sigW = _sigW;
+    widget.data.sigAbsolute = true;
+    widget.data.sigPosV2 = true;
+    widget.data.sigLayoutVersion = 5;
+    await widget.store.saveInspection(widget.data);
+    final newBytes = await buildPdf(widget.data, widget.store);
+    if (!mounted) return;
+    setState(() {
+      _currentBytes = newBytes;
+      _editingSig = false;
+      _page1Image = null;
+      _rev++;
+    });
+  }
+
+  Future<void> _exitEditMode() async {
+    final cleanBytes = await buildPdf(widget.data, widget.store);
+    if (!mounted) return;
+    setState(() {
+      _currentBytes = cleanBytes;
+      _editingSig = false;
+      _page1Image = null;
+      _rev++;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Preview PDF'),
+        title: Text(_editingSig ? 'Atur Posisi TTD' : 'Preview PDF'),
         backgroundColor: navy,
         foregroundColor: Colors.white,
+        actions: [
+          if (!_editingSig)
+            IconButton(
+              tooltip: widget.data.signature == null ? 'Upload TTD' : 'Atur TTD',
+              onPressed: _enterEditMode,
+              icon: Icon(
+                widget.data.signature == null
+                    ? Icons.draw
+                    : Icons.edit,
+              ),
+            ),
+          if (_editingSig) ...[
+            TextButton.icon(
+              onPressed: _pickAndSetSignature,
+              icon: const Icon(Icons.upload_file, size: 16, color: Colors.white),
+              label: const Text('Ganti File', style: TextStyle(color: Colors.white)),
+            ),
+            TextButton(
+              onPressed: _resetSig,
+              child: const Text('Reset', style: TextStyle(color: Colors.white)),
+            ),
+            TextButton(
+              onPressed: _exitEditMode,
+              child: const Text('Batal', style: TextStyle(color: Colors.white70)),
+            ),
+            FilledButton(
+              onPressed: _saveSig,
+              child: const Text('Simpan'),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ],
       ),
-      body: PdfPreview(
-        build: (_) async => bytes,
-        canChangePageFormat: false,
-        allowPrinting: true,
-        allowSharing: true,
+      body: _editingSig && _page1Image != null
+          ? _buildSigEditor()
+          : _editingSig && _page1Image == null
+              ? const Center(child: CircularProgressIndicator())
+              : PdfPreview(
+                  key: ValueKey(_rev),
+                  build: (_) async => _currentBytes,
+                  canChangePageFormat: false,
+                  allowPrinting: true,
+                  allowSharing: true,
+                ),
+    );
+  }
+
+  Widget _buildSigEditor() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const Text(
+              'Geser tanda tangan untuk atur posisi. Gunakan slider untuk ukuran.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final imgW = constraints.maxWidth;
+                  final imgH = constraints.maxHeight;
+                  final rasterW = _rasterWidthPx;
+                  final rasterH = _rasterHeightPx;
+                  final imageScale = math.min(imgW / rasterW, imgH / rasterH);
+                  final drawnW = rasterW * imageScale;
+                  final drawnH = rasterH * imageScale;
+                  final offsetX = (imgW - drawnW) / 2;
+                  final offsetY = (imgH - drawnH) / 2;
+                  final pointScale = _signatureRasterDpi / 72 * imageScale;
+                  final sigSize = _signatureImageSize(widget.data.signature, _sigW);
+                  final sigPointW = sigSize[0];
+                  final sigPointH = sigSize[1];
+                  final sigW = sigPointW * pointScale;
+                  final sigH = sigPointH * pointScale;
+                  final slotLeft = offsetX + _signatureSlotLeft() * pointScale;
+                  final slotTop = offsetY + _signatureSlotTop(widget.data.findings.length) * pointScale;
+                  final slotW = _pdfSigSlotW * pointScale;
+                  final slotH = _pdfSigSlotH * pointScale;
+                  final sigMoveH = (_sigNameTop * pointScale - sigH)
+                      .clamp(0.0, slotH - sigH);
+                  final sigLeft = slotLeft + _sigX * (slotW - sigW);
+                  final sigTop = slotTop + _sigY * sigMoveH;
+
+                  return RepaintBoundary(
+                    child: GestureDetector(
+                    child: Stack(
+                      children: [
+                        SizedBox(
+                          width: imgW,
+                          height: imgH,
+                          child: Image(
+                            image: _page1Image!,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                        Positioned(
+                          left: sigLeft,
+                          top: sigTop,
+                          child: GestureDetector(
+                            onScaleStart: (_) => _sigStartW = _sigW,
+                            onScaleUpdate: (details) {
+                              setState(() {
+                                _sigW = (_sigStartW * details.scale).clamp(_sigMinScale, _sigMaxScale).toDouble();
+                                _sigX += details.focalPointDelta.dx / (slotW - sigW).clamp(1.0, double.infinity);
+                                _sigY += details.focalPointDelta.dy / sigMoveH.clamp(1.0, double.infinity);
+                                _sigX = _sigX.clamp(0.0, 1.0);
+                                _sigY = _sigY.clamp(0.0, 1.0);
+                              });
+                            },
+                            child: Container(
+                              width: sigW,
+                              height: sigH,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: blue, width: 2),
+                                color: Colors.white.withValues(alpha: 0.3),
+                              ),
+                              child: widget.data.signature != null
+                                  ? Image.memory(
+                                      base64Decode(widget.data.signature!),
+                                      fit: BoxFit.contain,
+                                      filterQuality: FilterQuality.low,
+                                    )
+                                  : const SizedBox(height: 40),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Text('Ukuran TTD: ', style: TextStyle(fontSize: 13)),
+                Expanded(
+                  child: Slider(
+                    value: _sigW,
+                    min: _sigMinScale,
+                    max: _sigMaxScale,
+                    divisions: 12,
+                    label: _sigW.toStringAsFixed(1),
+                    onChanged: (v) => setState(() => _sigW = v),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
