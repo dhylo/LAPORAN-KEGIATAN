@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.1-alpha
+
+- Perbaikan revert posisi saat tombol Batal: editor selalu baca posisi terakhir dari data tersimpan, bukan dari memori sementara.
+- `_loadSavedSigPosition()` dibuat sebagai satu sumber kebenaran untuk `sigW`, `sigX`, `sigY` di `initState` dan `_enterEditMode()`.
+- `_cacheSignature()` dipindah ke sebelum `setState` untuk menghindari 1 frame overlay kosong.
+- Rapikan formatting di baris 2488.
+- `sigMoveH.clamp(1.0, double.infinity)` dipertahankan sebagai guard pembagi nol (bukan bug, tapi defensif).
+
 ## v0.1.0-alpha
 
 - Perbaikan editor posisi tanda tangan: preview PDF halaman 1 (tanpa TTD) dengan overlay TTD langsung.
@@ -8,4 +16,3 @@
 - Tombol Upload TTD/Stempel ditambahkan di toolbar preview PDF.
 - `sigLayoutVersion = 8` untuk kompatibilitas layout baru.
 - Mode edit menampilkan slot outline dan garis bantu.
-- State editor aman: tombol Batal mengembalikan ke posisi terakhir yang disimpan.

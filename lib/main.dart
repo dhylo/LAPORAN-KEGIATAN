@@ -2183,12 +2183,10 @@ class _PdfPageState extends State<PdfPage> {
   void initState() {
     super.initState();
     _currentBytes = widget.bytes;
-    _sigW = (widget.data.sigW ?? 1.0).clamp(_sigMinScale, _sigMaxScale).toDouble();
-    final useSavedPosition = widget.data.sigAbsolute &&
-        widget.data.sigPosV2 &&
-        widget.data.sigLayoutVersion >= _sigLayoutVersion;
-    _sigX = useSavedPosition ? (widget.data.sigX ?? 0.5) : 0.5;
-    _sigY = useSavedPosition ? (widget.data.sigY ?? _defaultSignatureY(widget.data.signature, _sigW)) : _defaultSignatureY(widget.data.signature, _sigW);
+    final (sigW, sigX, sigY) = _loadSavedSigPosition();
+    _sigW = sigW;
+    _sigX = sigX;
+    _sigY = sigY;
     _cacheSignature();
   }
 
@@ -2230,25 +2228,33 @@ class _PdfPageState extends State<PdfPage> {
     }
   }
 
+  (double, double, double) _loadSavedSigPosition() {
+    final sigW = (widget.data.sigW ?? 1.0).clamp(_sigMinScale, _sigMaxScale).toDouble();
+    final useSavedPosition = widget.data.sigAbsolute &&
+        widget.data.sigPosV2 &&
+        widget.data.sigLayoutVersion >= _sigLayoutVersion;
+    final sigX = useSavedPosition ? (widget.data.sigX ?? 0.5) : 0.5;
+    final sigY = useSavedPosition ? (widget.data.sigY ?? _defaultSignatureY(widget.data.signature, sigW)) : _defaultSignatureY(widget.data.signature, sigW);
+    return (sigW, sigX, sigY);
+  }
+
   Future<void> _enterEditMode() async {
     if (widget.data.signature == null) {
       await _pickAndSetSignature();
       return;
     }
-    if (!widget.data.sigAbsolute ||
-        !widget.data.sigPosV2 ||
-        widget.data.sigLayoutVersion < _sigLayoutVersion) {
-      _sigX = 0.5;
-      _sigY = _defaultSignatureY(widget.data.signature, _sigW);
-    }
+    final (sigW, sigX, sigY) = _loadSavedSigPosition();
+    _sigW = sigW;
+    _sigX = sigX;
+    _sigY = sigY;
     _lastFittedScale = 0;
     _txCtrl.value = Matrix4.identity();
     _page1Image = null;
+    _cacheSignature();
     setState(() => _editingSig = true);
     // Build PDF tanpa TTD sebagai latar editor.
     final cleanBytes = await buildPdf(widget.data, widget.store, includeSignature: false);
     setState(() => _currentBytes = cleanBytes);
-    _cacheSignature();
     await _rasterizePage1();
   }
 
@@ -2479,7 +2485,8 @@ class _PdfPageState extends State<PdfPage> {
                               _sigX += dxInPoints / (slotW - sigW).clamp(1.0, double.infinity);
                               _sigY += dyInPoints / sigMoveH.clamp(1.0, double.infinity);
                               _sigX = _sigX.clamp(0.0, 1.0);
-                              _sigY = _sigY.clamp(0.0, 1.0);                            });
+                              _sigY = _sigY.clamp(0.0, 1.0);
+                            });
                           },
                           child: SizedBox(
                             width: sigW,

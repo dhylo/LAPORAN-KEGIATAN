@@ -6,14 +6,16 @@
 - Dependencies: `pdf ^3.11.3`, `printing ^5.14.2`, `image ^4.2.0`
 - Remote: `https://github.com/dhylo/LAPORAN-KEGIATAN.git`
 - Branch: `main` (current: `work/sig-editor-fix`)
-- Commit: `a96fcb9` (v0.1.0-alpha)
+- Commit: `8a637a8` (v0.1.1-alpha)
+- Tag: `v0.1.1-alpha`
 
 ## File structure
-- `lib/main.dart` (2542 lines): single-file app with all logic
-- `pubspec.yaml`: versi alpha (`0.1.0-alpha+1`)
+- `lib/main.dart` (2563 lines): single-file app dengan all logic
+- `pubspec.yaml`: versi alpha (`0.1.1-alpha+1`)
 - `CHANGELOG.md`: log rilis alpha
 - `docs/`: memori proyek
 - `OUTPUT CONTOH INSPEKSI BULANAN.pdf`: contoh output referensi
+- `devtools_options.yaml`: config tooling (committed)
 
 ## Core data model
 - `Inspection`: `sigX`, `sigY` (0–1), `sigW` (0.5–1.15), `sigLayoutVersion`, `sigAbsolute`, `sigPosV2`
@@ -47,10 +49,10 @@
 
 ## Key functions
 - `_buildPageSigEditor()`: editor preview PDF + overlay TTD
-- `_buildPageSignature()`: render TTD di PDF (baris 1846)
+- `_buildPageSignature()`: render TTD di PDF (baris 1857)
 - `_defaultSignatureY(sig, scale)`: hitung posisi default Y dari scale
 - `_signatureImageSizeFromAspect(aspect, scale)`: `[w, h]` pt dari PNG aspect dan scale
-- `_loadSavedSigPosition()`: tuple `(sigW, sigX, sigY)` dari data atau default
+- `_loadSavedSigPosition()`: tuple `(sigW, sigX, sigY)` dari data tersimpan atau default
 
 ## Transform API
 - `translateByDouble(tx, ty, 0, 1)` instead deprecated `translate(tx, ty)`
@@ -63,3 +65,11 @@
 ## Toolbar (preview mode)
 - Upload TTD/Stempel di kanan
 - `canChangeOrientation: false`, `canDebug: false`, `allowPrinting: true`, `allowSharing: true`
+
+## Commit convention
+- Format: `<type>(sig): <descriptions> (<tag>)`
+- Tag: `vX.X.X-alpha`
+- Batal otomatis revert karena `_enterEditMode()` selalu baca ulang posisi dari `widget.data`
+
+## Guard pattern
+- `sigMoveH.clamp(1.0, double.infinity)` dipakai di drag handler untuk mencegah pembagi nol (defensif, bukan bug).

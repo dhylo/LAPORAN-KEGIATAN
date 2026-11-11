@@ -1,9 +1,19 @@
 # DECISIONS
 
+## v0.1.1-alpha
+
+- `_loadSavedSigPosition()` dibuat sebagai fungsi tunggal untuk memuat `(sigW, sigX, sigY)` dari data tersimpan atau default.
+- `_enterEditMode()` selalu baca ulang posisi dari data → Batal otomatis revert posisi ke yang disimpan.
+- `_cacheSignature()` dipindah sebelum `setState()` untuk menghindari 1 frame overlay kosong.
+- `sigMoveH.clamp(1.0, double.infinity)` dipertahankan sebagai guard pembagi nol (defensif).
+- `pubspec.yaml` versi naik ke `0.1.1-alpha+1`.
+- `CHANGELOG.md` tambah entri v0.1.1-alpha.
+
 ## v0.1.0-alpha
+
 - `_sigLayoutVersion = 8` (naik dari 6)
 - `_sigOverlapPt = 18.0`, `_sigUpPt = 33.0`
-- `sigMoveH` tanpa clamp tambahan
+- `sigMoveH` tanpa clamp tambahan (clamp hanya sebagai guard pembagi nol)
 - Tombol Upload TTD/Stempel di toolbar preview (bukan editor terpisah)
 - `canChangeOrientation: false`, `canDebug: false`
 - Variabel `_rasterWidthPx`, `_rasterHeightPx` dihapus (unused)
@@ -21,6 +31,8 @@
 - Label AppBar: `'Atur Posisi TTD'` (hapus `• build 8`)
 
 ## Rationale
+
 - Layout slot fixed (225×102 pt), TTD relative 0–1, drag delta poin
 - Raster 1:1 mapping dengan `BoxFit.fill` + `SizedBox(poin, poin)`
 - Transform API baru untuk kompatibilitas Flutter modern
+- Batal revert wajib karena state editor (posisi) terpisah dari state tersimpan

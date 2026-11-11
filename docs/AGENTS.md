@@ -27,3 +27,4 @@ Flutter desktop/mobile application untuk laporan inspeksi dengan fitur tanda tan
 ## Commit convention
 - Format: `<type>(sig): <descriptions> (<tag>)`
 - Tag: `vX.X.X-alpha`
+- Batal otomatis revert karena `_enterEditMode()` selalu baca ulang posisi dari data
