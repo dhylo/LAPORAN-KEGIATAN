@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
@@ -21,16 +20,22 @@ const navy = Color(0xFF12345B);
 const blue = Color(0xFF1D70B8);
 
 const _pdfSigSlotW = 225.0;
-const _pdfSigSlotH = 112.0;
+const _pdfSigSlotH = 102.0;
 const _pdfSigImageW = 150.0;
 const _pdfSigImageH = 75.0;
 const _sigMinScale = 0.5;
-const _sigMaxScale = 1.25;
+const _sigMaxScale = 1.15;
 // Fixed name position inside signature slot. Signature moves above it.
-const _sigNameTop = 100.0;
-const _sigFooterH = 170.0;
+const _sigNameTop = 90.0;
+// TTD boleh turun menimpa nama sejauh 18 pt (dasar TTD 90 → 108).
+const _sigOverlapPt = 18.0;
+// Slot mulai 33 pt di bawah baris "Mengetahui,". TTD boleh naik sampai sana.
+const _sigUpPt = 33.0;
+const _sigFooterH = 140.0;
+const _sigLayoutVersion = 8;
 
 const _pdfPageW = 595.28;
+const _pdfPageH = 841.89; // A4 width/height in pt
 const _pdfPagePadLeft = 42.0;
 const _pdfPagePadTop = 35.0;
 const _pdfPagePadRight = 42.0;
@@ -83,9 +88,24 @@ List<double> _signatureImageSize(String? encoded, double scale) {
       ratio = fallbackRatio;
     }
   }
-  final baseW = ratio >= fallbackRatio ? _pdfSigImageW : _pdfSigImageH * ratio;
-  final baseH = baseW / ratio;
+  return _signatureImageSizeFromAspect(ratio, scale);
+}
+
+List<double> _signatureImageSizeFromAspect(double ratio, double scale) {
+  const fallbackRatio = _pdfSigImageW / _pdfSigImageH;
+  final safeRatio = ratio > 0 ? ratio : fallbackRatio;
+  final baseW = safeRatio >= fallbackRatio ? _pdfSigImageW : _pdfSigImageH * safeRatio;
+  final baseH = baseW / safeRatio;
   return [baseW * scale, baseH * scale];
+}
+
+double _defaultSignatureY(String? encoded, double scale) {
+  final sigH = _signatureImageSize(encoded, scale)[1];
+  final minTop = -_sigUpPt;
+  final maxTop = _sigNameTop + _sigOverlapPt - sigH;
+  final moveH = maxTop - minTop;
+  if (moveH <= 0) return 0.0;
+  return ((_sigNameTop - sigH - minTop) / moveH).clamp(0.0, 1.0).toDouble();
 }
 
 final dates = DateFormat('dd/MM/yyyy');
@@ -1819,17 +1839,20 @@ Future<Uint8List> buildPdf(
   final sigSize = _signatureImageSize(data.signature, sigScale);
   final sigImageW = sigSize[0];
   final sigImageH = sigSize[1];
-  final sigX = (data.sigLayoutVersion >= 5 ? (data.sigX ?? 0.5) : 0.5)
+  final sigX = (data.sigLayoutVersion >= _sigLayoutVersion ? (data.sigX ?? 0.5) : 0.5)
       .clamp(0.0, 1.0)
       .toDouble();
-  final sigY = (data.sigLayoutVersion >= 5 ? (data.sigY ?? 1.0) : 1.0)
+  final defaultY = _defaultSignatureY(data.signature, sigScale);
+  final sigY = (data.sigLayoutVersion >= _sigLayoutVersion ? (data.sigY ?? defaultY) : defaultY)
       .clamp(0.0, 1.0)
       .toDouble();
   final sigSlotLeft = _signatureSlotLeft();
   final sigSlotTop = _signatureSlotTop(n);
-  final sigMoveH = (_sigNameTop - sigImageH).clamp(0.0, _pdfSigSlotH - sigImageH);
+  final sigMinTop = -_sigUpPt;
+  final sigMaxTop = _sigNameTop + _sigOverlapPt - sigImageH;
+  final sigMoveH = sigMaxTop - sigMinTop;
   final sigLeft = sigSlotLeft + sigX * (_pdfSigSlotW - sigImageW);
-  final sigTop = sigSlotTop + sigY * sigMoveH;
+  final sigTop = sigSlotTop + sigMinTop + sigY * sigMoveH;
 
   document.addPage(
     pw.Page(
@@ -2099,6 +2122,48 @@ class PdfPage extends StatefulWidget {
   State<PdfPage> createState() => _PdfPageState();
 }
 
+class _SignatureSlotPainter extends CustomPainter {
+  final double slotW;
+  final double slotH;
+
+  const _SignatureSlotPainter({required this.slotW, required this.slotH});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, slotW, slotH),
+      Paint()..color = blue.withValues(alpha: 0.05),
+    );
+    final paint = Paint()
+      ..color = blue.withValues(alpha: 0.9)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    const dash = 8.0;
+    const gap = 5.0;
+
+    void drawHorizontal(double y) {
+      for (var x = 0.0; x < slotW; x += dash + gap) {
+        canvas.drawLine(Offset(x, y), Offset((x + dash).clamp(0.0, slotW), y), paint);
+      }
+    }
+
+    void drawVertical(double x) {
+      for (var y = 0.0; y < slotH; y += dash + gap) {
+        canvas.drawLine(Offset(x, y), Offset(x, (y + dash).clamp(0.0, slotH)), paint);
+      }
+    }
+
+    drawHorizontal(0);
+    drawHorizontal(slotH);
+    drawVertical(0);
+    drawVertical(slotW);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SignatureSlotPainter oldDelegate) =>
+      oldDelegate.slotW != slotW || oldDelegate.slotH != slotH;
+}
+
 class _PdfPageState extends State<PdfPage> {
   int _rev = 0;
   bool _editingSig = false;
@@ -2106,10 +2171,11 @@ class _PdfPageState extends State<PdfPage> {
   double _sigX = 0;
   double _sigY = 0;
   double _sigW = 1.0;
-  double _rasterWidthPx = 1240;
-  double _rasterHeightPx = 1754;
-  double _sigStartW = 1.0;
   late Uint8List _currentBytes;
+  late final TransformationController _txCtrl = TransformationController();
+  double _lastFittedScale = 0;
+  Uint8List? _sigBytes;
+  double _sigAspect = 2.0;
 
   // Reference area size for signature positioning (matches PDF Stack: 150x80)
 
@@ -2120,9 +2186,23 @@ class _PdfPageState extends State<PdfPage> {
     _sigW = (widget.data.sigW ?? 1.0).clamp(_sigMinScale, _sigMaxScale).toDouble();
     final useSavedPosition = widget.data.sigAbsolute &&
         widget.data.sigPosV2 &&
-        widget.data.sigLayoutVersion >= 5;
+        widget.data.sigLayoutVersion >= _sigLayoutVersion;
     _sigX = useSavedPosition ? (widget.data.sigX ?? 0.5) : 0.5;
-    _sigY = useSavedPosition ? (widget.data.sigY ?? 1.0) : 1.0;
+    _sigY = useSavedPosition ? (widget.data.sigY ?? _defaultSignatureY(widget.data.signature, _sigW)) : _defaultSignatureY(widget.data.signature, _sigW);
+    _cacheSignature();
+  }
+
+  void _initMatrix(double viewW, double viewH) {
+    final ratio = _pdfPageW / _pdfPageH;
+    final boxW = viewW < viewH * ratio ? viewW : viewH * ratio;
+    final fittedScale = boxW / _pdfPageW;
+    if (fittedScale == _lastFittedScale) return;
+    _lastFittedScale = fittedScale;
+    final translateX = (viewW - _pdfPageW * fittedScale) / 2;
+    final translateY = (viewH - _pdfPageH * fittedScale) / 2;
+    _txCtrl.value = Matrix4.identity()
+      ..translateByDouble(translateX, translateY, 0, 1)
+      ..scaleByDouble(fittedScale, fittedScale, fittedScale, 1);
   }
 
   Future<void> _pickAndSetSignature() async {
@@ -2131,12 +2211,13 @@ class _PdfPageState extends State<PdfPage> {
       widget.data.signature = base64Encode(result);
       _sigW = 1.0;
       _sigX = 0.5;
-      _sigY = 1.0;
+      _sigY = _defaultSignatureY(widget.data.signature, _sigW);
+      _cacheSignature();
       widget.data.sigX = _sigX;
       widget.data.sigY = _sigY;
       widget.data.sigW = _sigW;
       widget.data.sigPosV2 = true;
-      widget.data.sigLayoutVersion = 5;
+      widget.data.sigLayoutVersion = _sigLayoutVersion;
       await widget.store.saveInspection(widget.data);
       // Build PDF tanpa TTD sebagai latar editor.
       final newBytes = await buildPdf(widget.data, widget.store, includeSignature: false);
@@ -2156,15 +2237,41 @@ class _PdfPageState extends State<PdfPage> {
     }
     if (!widget.data.sigAbsolute ||
         !widget.data.sigPosV2 ||
-        widget.data.sigLayoutVersion < 5) {
+        widget.data.sigLayoutVersion < _sigLayoutVersion) {
       _sigX = 0.5;
-      _sigY = 1.0;
+      _sigY = _defaultSignatureY(widget.data.signature, _sigW);
     }
+    _lastFittedScale = 0;
+    _txCtrl.value = Matrix4.identity();
+    _page1Image = null;
     setState(() => _editingSig = true);
     // Build PDF tanpa TTD sebagai latar editor.
     final cleanBytes = await buildPdf(widget.data, widget.store, includeSignature: false);
     setState(() => _currentBytes = cleanBytes);
+    _cacheSignature();
     await _rasterizePage1();
+  }
+
+  void _cacheSignature() {
+    if (widget.data.signature == null) {
+      _sigBytes = null;
+      _sigAspect = 2.0;
+      return;
+    }
+    try {
+      final bytes = base64Decode(widget.data.signature!);
+      final decoded = img.decodeImage(bytes);
+      if (decoded != null && decoded.height > 0) {
+        _sigBytes = Uint8List.fromList(bytes);
+        _sigAspect = decoded.width / decoded.height;
+      } else {
+        _sigBytes = null;
+        _sigAspect = 2.0;
+      }
+    } catch (_) {
+      _sigBytes = null;
+      _sigAspect = 2.0;
+    }
   }
 
   Future<void> _rasterizePage1() async {
@@ -2175,11 +2282,6 @@ class _PdfPageState extends State<PdfPage> {
         dpi: _signatureRasterDpi,
       )) {
         final png = await page.toPng();
-        final raster = img.decodeImage(png);
-        if (raster != null) {
-          _rasterWidthPx = raster.width.toDouble();
-          _rasterHeightPx = raster.height.toDouble();
-        }
         if (mounted) {
           setState(() {
             _page1Image = MemoryImage(png);
@@ -2190,17 +2292,21 @@ class _PdfPageState extends State<PdfPage> {
     } catch (_) {
       if (mounted) {
         showInfo(context, 'Raster PDF tidak didukung di platform ini.');
-        setState(() => _editingSig = false);
+        final cleanBytes = await buildPdf(widget.data, widget.store);
+        setState(() {
+          _currentBytes = cleanBytes;
+          _editingSig = false;
+        });
       }
     }
   }
 
   Future<void> _resetSig() async {
-    setState(() {
-      _sigW = 1.0;
-      _sigX = 0.5;
-      _sigY = 1.0;
-    });
+    _sigW = 1.0;
+    _sigX = 0.5;
+    _sigY = _defaultSignatureY(widget.data.signature, _sigW);
+    _cacheSignature();
+    setState(() {});
   }
 
   Future<void> _saveSig() async {
@@ -2209,7 +2315,7 @@ class _PdfPageState extends State<PdfPage> {
     widget.data.sigW = _sigW;
     widget.data.sigAbsolute = true;
     widget.data.sigPosV2 = true;
-    widget.data.sigLayoutVersion = 5;
+    widget.data.sigLayoutVersion = _sigLayoutVersion;
     await widget.store.saveInspection(widget.data);
     final newBytes = await buildPdf(widget.data, widget.store);
     if (!mounted) return;
@@ -2217,6 +2323,7 @@ class _PdfPageState extends State<PdfPage> {
       _currentBytes = newBytes;
       _editingSig = false;
       _page1Image = null;
+      _sigBytes = null;
       _rev++;
     });
   }
@@ -2228,8 +2335,15 @@ class _PdfPageState extends State<PdfPage> {
       _currentBytes = cleanBytes;
       _editingSig = false;
       _page1Image = null;
+      _sigBytes = null;
       _rev++;
     });
+  }
+
+  @override
+  void dispose() {
+    _txCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -2273,126 +2387,156 @@ class _PdfPageState extends State<PdfPage> {
         ],
       ),
       body: _editingSig && _page1Image != null
-          ? _buildSigEditor()
+          ? _buildPageSigEditor()
           : _editingSig && _page1Image == null
               ? const Center(child: CircularProgressIndicator())
               : PdfPreview(
                   key: ValueKey(_rev),
                   build: (_) async => _currentBytes,
                   canChangePageFormat: false,
+                  canChangeOrientation: false,
+                  canDebug: false,
                   allowPrinting: true,
                   allowSharing: true,
+                  actions: [
+                    IconButton(
+                      tooltip: 'Upload TTD / Stempel',
+                      icon: const Icon(Icons.upload_file),
+                      onPressed: _pickAndSetSignature,
+                    ),
+                  ],
                 ),
     );
   }
 
-  Widget _buildSigEditor() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            const Text(
-              'Geser tanda tangan untuk atur posisi. Gunakan slider untuk ukuran.',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final imgW = constraints.maxWidth;
-                  final imgH = constraints.maxHeight;
-                  final rasterW = _rasterWidthPx;
-                  final rasterH = _rasterHeightPx;
-                  final imageScale = math.min(imgW / rasterW, imgH / rasterH);
-                  final drawnW = rasterW * imageScale;
-                  final drawnH = rasterH * imageScale;
-                  final offsetX = (imgW - drawnW) / 2;
-                  final offsetY = (imgH - drawnH) / 2;
-                  final pointScale = _signatureRasterDpi / 72 * imageScale;
-                  final sigSize = _signatureImageSize(widget.data.signature, _sigW);
-                  final sigPointW = sigSize[0];
-                  final sigPointH = sigSize[1];
-                  final sigW = sigPointW * pointScale;
-                  final sigH = sigPointH * pointScale;
-                  final slotLeft = offsetX + _signatureSlotLeft() * pointScale;
-                  final slotTop = offsetY + _signatureSlotTop(widget.data.findings.length) * pointScale;
-                  final slotW = _pdfSigSlotW * pointScale;
-                  final slotH = _pdfSigSlotH * pointScale;
-                  final sigMoveH = (_sigNameTop * pointScale - sigH)
-                      .clamp(0.0, slotH - sigH);
-                  final sigLeft = slotLeft + _sigX * (slotW - sigW);
-                  final sigTop = slotTop + _sigY * sigMoveH;
+  Widget _buildPageSigEditor() {
+    return Column(
+      children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final viewW = constraints.maxWidth;
+              final viewH = constraints.maxHeight;
+              final ratio = _pdfPageW / _pdfPageH;
+              final boxW = viewW < viewH * ratio ? viewW : viewH * ratio;
+              final fittedScale = boxW / _pdfPageW;
+              if ((_lastFittedScale - fittedScale).abs() > 0.0001) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _initMatrix(viewW, viewH);
+                });
+              }
+              final slotW = _pdfSigSlotW;
+              final slotH = _pdfSigSlotH;
+              final slotLeft = _signatureSlotLeft();
+              final slotTop = _signatureSlotTop(widget.data.findings.length);
+              final sigSize = _signatureImageSizeFromAspect(_sigAspect, _sigW);
+              final sigPointW = sigSize[0];
+              final sigPointH = sigSize[1];
+              final sigW = sigPointW;
+              final sigH = sigPointH;
+              final sigMinTop = -_sigUpPt;
+              final sigMaxTop = _sigNameTop + _sigOverlapPt - sigPointH;
+              final sigMoveH = sigMaxTop - sigMinTop;
+              final sigTop = slotTop + sigMinTop + _sigY * sigMoveH;
+              final signerName = widget.store.findStaff(widget.data.picSignerId)?.name ?? '';
 
-                  return RepaintBoundary(
-                    child: GestureDetector(
-                    child: Stack(
-                      children: [
-                        SizedBox(
-                          width: imgW,
-                          height: imgH,
-                          child: Image(
-                            image: _page1Image!,
-                            fit: BoxFit.contain,
+              return InteractiveViewer(
+                constrained: false,
+                panEnabled: true,
+                scaleEnabled: true,
+                minScale: 0.1,
+                maxScale: 8.0,
+                boundaryMargin: const EdgeInsets.all(double.infinity),
+                transformationController: _txCtrl,
+                child: SizedBox(
+                  width: _pdfPageW,
+                  height: _pdfPageH,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Image(
+                          image: _page1Image!,
+                          fit: BoxFit.fill,
+                        ),
+                      ),
+                      Positioned(
+                        left: slotLeft,
+                        top: slotTop,
+                        child: CustomPaint(
+                          size: Size(slotW.toDouble(), slotH.toDouble()),
+                          painter: _SignatureSlotPainter(slotW: slotW, slotH: slotH),
+                        ),
+                      ),
+                      Positioned(
+                        left: slotLeft + _sigX * (slotW - sigW),
+                        top: sigTop,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onPanUpdate: (details) {
+                            setState(() {
+                              final dxInPoints = details.delta.dx;
+                              final dyInPoints = details.delta.dy;
+                              _sigX += dxInPoints / (slotW - sigW).clamp(1.0, double.infinity);
+                              _sigY += dyInPoints / sigMoveH.clamp(1.0, double.infinity);
+                              _sigX = _sigX.clamp(0.0, 1.0);
+                              _sigY = _sigY.clamp(0.0, 1.0);                            });
+                          },
+                          child: SizedBox(
+                            width: sigW,
+                            height: sigH,
+                            child: _sigBytes != null
+                                ? Image.memory(
+                                    _sigBytes!,
+                                    fit: BoxFit.contain,
+                                    filterQuality: FilterQuality.high,
+                                  )
+                                : const SizedBox.shrink(),
                           ),
                         ),
-                        Positioned(
-                          left: sigLeft,
-                          top: sigTop,
-                          child: GestureDetector(
-                            onScaleStart: (_) => _sigStartW = _sigW,
-                            onScaleUpdate: (details) {
-                              setState(() {
-                                _sigW = (_sigStartW * details.scale).clamp(_sigMinScale, _sigMaxScale).toDouble();
-                                _sigX += details.focalPointDelta.dx / (slotW - sigW).clamp(1.0, double.infinity);
-                                _sigY += details.focalPointDelta.dy / sigMoveH.clamp(1.0, double.infinity);
-                                _sigX = _sigX.clamp(0.0, 1.0);
-                                _sigY = _sigY.clamp(0.0, 1.0);
-                              });
-                            },
-                            child: Container(
-                              width: sigW,
-                              height: sigH,
-                              decoration: BoxDecoration(
-                                border: Border.all(color: blue, width: 2),
-                                color: Colors.white.withValues(alpha: 0.3),
-                              ),
-                              child: widget.data.signature != null
-                                  ? Image.memory(
-                                      base64Decode(widget.data.signature!),
-                                      fit: BoxFit.contain,
-                                      filterQuality: FilterQuality.low,
-                                    )
-                                  : const SizedBox(height: 40),
+                      ),
+                      Positioned(
+                        left: slotLeft,
+                        top: slotTop + _sigNameTop,
+                        width: slotW,
+                        child: IgnorePointer(
+                          child: Text(
+                            signerName,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 9,
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Text('Ukuran TTD: ', style: TextStyle(fontSize: 13)),
-                Expanded(
-                  child: Slider(
-                    value: _sigW,
-                    min: _sigMinScale,
-                    max: _sigMaxScale,
-                    divisions: 12,
-                    label: _sigW.toStringAsFixed(1),
-                    onChanged: (v) => setState(() => _sigW = v),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ],
+              );
+            },
+          ),
         ),
-      ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          color: navy,
+          child: Row(
+            children: [
+              const Text('Ukuran TTD:', style: TextStyle(color: Colors.white, fontSize: 13)),
+              Expanded(
+                child: Slider(
+                  value: _sigW,
+                  min: _sigMinScale,
+                  max: _sigMaxScale,
+                  divisions: 12,
+                  label: _sigW.toStringAsFixed(1),
+                  activeColor: Colors.white,
+                  onChanged: (v) => setState(() => _sigW = v),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
