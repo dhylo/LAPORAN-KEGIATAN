@@ -1289,7 +1289,10 @@ class FindingEditor extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 16),
                 child: Text(
                   '${index + 1}.',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -1350,9 +1353,7 @@ class FindingEditor extends StatelessWidget {
                   }
                 },
                 child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Target',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Target'),
                   child: Text(
                     finding.target == null
                         ? 'Pilih'
@@ -1364,7 +1365,11 @@ class FindingEditor extends StatelessWidget {
             ),
             IconButton(
               onPressed: onRemove,
-              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+              icon: const Icon(
+                Icons.delete_outline,
+                size: 18,
+                color: Colors.red,
+              ),
             ),
           ],
         ),
@@ -2515,11 +2520,9 @@ class _PdfPageState extends State<PdfPage> {
             ),
           );
 
-    return Theme(
-      data: macLightTheme(),
-      child: Scaffold(
-        body: MacShell(
-          selected: 'Inspeksi Bulanan',
+    return Scaffold(
+      body: MacShell(
+        selected: 'Inspeksi Bulanan',
         onSelected: (value) => _navigateMacMenu(context, value),
         title: _editingSig ? 'Atur Posisi TTD' : 'Preview PDF',
         actions: [

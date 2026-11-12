@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.2-alpha
+
+- Perbaikan build error (missing parenthesis) di halaman Preview PDF.
+- Perbaikan layout preview: Sidebar dan Toolbar kembali mengikuti tema aplikasi (Dark/Light), hanya area kanvas PDF dan editor TTD yang dipaksa tetap terang.
+
 ## v0.2.1-alpha
 
 - Tambah toggle tema (Terang, Gelap, Sistem) di sidebar dengan penyimpanan permanen.
