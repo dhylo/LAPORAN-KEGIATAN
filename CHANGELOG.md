@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.1-alpha
+
+- Tambah toggle tema (Terang, Gelap, Sistem) di sidebar dengan penyimpanan permanen.
+- Tambah tombol kembali otomatis di toolbar dan shortcut `Esc`.
+- Sederhanakan garis bantu editor TTD (satu kotak dashed + garis nama).
+- Paksa tema terang pada area preview PDF dan editor TTD untuk kejelasan.
+- Perbaikan layout form temuan untuk mencegah artefak visual (barcode/overflow).
+
 ## v0.2.0-alpha
 
 - Restyle UI penuh bergaya macOS: sidebar, toolbar, grouped list, kartu, tombol, dialog, dan form.

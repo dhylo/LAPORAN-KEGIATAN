@@ -145,16 +145,23 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StoreScope(
-      store: store,
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'Inspeksi & Monitoring',
-        scrollBehavior: const _MacScrollBehavior(),
-        theme: macLightTheme(),
-        darkTheme: macDarkTheme(),
-        themeMode: ThemeMode.system,
-        home: const HomePage(),
+    return AnimatedBuilder(
+      animation: store,
+      builder: (context, _) => MacThemeScope(
+        mode: store.themeMode,
+        onChanged: store.setThemeMode,
+        child: StoreScope(
+          store: store,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            title: 'Inspeksi & Monitoring',
+            scrollBehavior: const _MacScrollBehavior(),
+            theme: macLightTheme(),
+            darkTheme: macDarkTheme(),
+            themeMode: store.themeMode,
+            home: const HomePage(),
+          ),
+        ),
       ),
     );
   }
@@ -164,11 +171,15 @@ void _navigateMacMenu(BuildContext context, String value) {
   if (value == 'Beranda') {
     Navigator.of(context).popUntil((route) => route.isFirst);
   } else if (value == 'Inspeksi Bulanan') {
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const InspectionListPage()));
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const InspectionListPage()),
+      (route) => route.isFirst,
+    );
   } else if (value == 'Pengaturan Master') {
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const MasterPage()));
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const MasterPage()),
+      (route) => route.isFirst,
+    );
   }
 }
 
@@ -322,6 +333,7 @@ class AppStore extends ChangeNotifier {
   List<Staff> staff = [];
   List<Inspection> inspections = [];
   String companyName = 'PT. TAMESTI PALIKSSA SEJAHTERA';
+  ThemeMode themeMode = ThemeMode.system;
 
   AppStore(this.prefs);
 
@@ -346,6 +358,21 @@ class AppStore extends ChangeNotifier {
           .toList();
     }
     companyName = prefs.getString('companyName') ?? companyName;
+    themeMode = switch (prefs.getString('themeMode')) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    themeMode = mode;
+    await prefs.setString('themeMode', switch (mode) {
+      ThemeMode.light => 'light',
+      ThemeMode.dark => 'dark',
+      ThemeMode.system => 'system',
+    });
+    notifyListeners();
   }
 
   Unit? findUnit(String id) {
@@ -1058,7 +1085,7 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
         padding: const EdgeInsets.all(24),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 860),
+            constraints: const BoxConstraints(maxWidth: 950),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1257,20 +1284,21 @@ class FindingEditor extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-              width: 38,
+              width: 24,
               child: Padding(
                 padding: const EdgeInsets.only(top: 16),
                 child: Text(
                   '${index + 1}.',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
             Expanded(
-              flex: 3,
+              flex: 4,
               child: TextFormField(
                 initialValue: finding.text,
                 maxLines: 2,
+                style: const TextStyle(fontSize: 13),
                 decoration: const InputDecoration(labelText: 'Temuan'),
                 onChanged: (value) {
                   finding.text = value;
@@ -1278,13 +1306,14 @@ class FindingEditor extends StatelessWidget {
                 },
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
-              flex: 2,
+              flex: 3,
               child: DropdownButtonFormField<String>(
                 initialValue: staff.any((person) => person.id == finding.picId)
                     ? finding.picId
                     : null,
+                style: const TextStyle(fontSize: 13),
                 decoration: const InputDecoration(labelText: 'PIC'),
                 items: staff
                     .map(
@@ -1292,6 +1321,7 @@ class FindingEditor extends StatelessWidget {
                         value: person.id,
                         child: Text(
                           person.name,
+                          style: const TextStyle(fontSize: 13),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -1303,9 +1333,9 @@ class FindingEditor extends StatelessWidget {
                 },
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
-              flex: 2,
+              flex: 3,
               child: InkWell(
                 onTap: () async {
                   final result = await showDatePicker(
@@ -1321,19 +1351,20 @@ class FindingEditor extends StatelessWidget {
                 },
                 child: InputDecorator(
                   decoration: const InputDecoration(
-                    labelText: 'Target Waktu Penyelesaian',
+                    labelText: 'Target',
                   ),
                   child: Text(
                     finding.target == null
-                        ? 'Pilih tanggal'
+                        ? 'Pilih'
                         : dates.format(finding.target!),
+                    style: const TextStyle(fontSize: 13),
                   ),
                 ),
               ),
             ),
             IconButton(
               onPressed: onRemove,
-              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
             ),
           ],
         ),
@@ -2233,31 +2264,21 @@ class _SignatureSlotPainter extends CustomPainter {
       ..strokeWidth = 1.5;
     drawDashedRect(Rect.fromLTWH(0, 0, slotW, moveAreaH), moveAreaPaintLine);
 
-    final slotPaint = Paint()
-      ..color = blue.withValues(alpha: 0.95)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-    drawDashedRect(Rect.fromLTWH(0, _sigUpPt, slotW, slotH), slotPaint);
-
     final guidePaint = Paint()
-      ..color = blue.withValues(alpha: 0.75)
+      ..color = blue.withValues(alpha: 0.55)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
-    for (var x = 0.0; x < slotW; x += dash + gap) {
-      canvas.drawLine(
-        Offset(x, _sigUpPt + _sigNameTop),
-        Offset((x + dash).clamp(0.0, slotW), _sigUpPt + _sigNameTop),
-        guidePaint,
-      );
-      canvas.drawLine(
-        Offset(x, _sigUpPt + _sigNameTop + _sigOverlapPt),
-        Offset(
-          (x + dash).clamp(0.0, slotW),
-          _sigUpPt + _sigNameTop + _sigOverlapPt,
-        ),
-        guidePaint,
-      );
-    }
+    drawDashedRect(Rect.fromLTWH(0, 0, slotW, moveAreaH), guidePaint);
+
+    final namePaint = Paint()
+      ..color = blue.withValues(alpha: 0.45)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawLine(
+      Offset(0, _sigUpPt + _sigNameTop),
+      Offset(slotW, _sigUpPt + _sigNameTop),
+      namePaint,
+    );
   }
 
   @override
@@ -2471,29 +2492,34 @@ class _PdfPageState extends State<PdfPage> {
   @override
   Widget build(BuildContext context) {
     final preview = _editingSig && _page1Image != null
-        ? _buildPageSigEditor()
+        ? Theme(data: macLightTheme(), child: _buildPageSigEditor())
         : _editingSig && _page1Image == null
         ? const Center(child: CircularProgressIndicator())
-        : PdfPreview(
-            key: ValueKey(_rev),
-            build: (_) async => _currentBytes,
-            canChangePageFormat: false,
-            canChangeOrientation: false,
-            canDebug: false,
-            allowPrinting: true,
-            allowSharing: true,
-            actions: [
-              IconButton(
-                tooltip: 'Upload TTD / Stempel',
-                icon: const Icon(Icons.upload_file),
-                onPressed: _pickAndSetSignature,
-              ),
-            ],
+        : Theme(
+            data: macLightTheme(),
+            child: PdfPreview(
+              key: ValueKey(_rev),
+              build: (_) async => _currentBytes,
+              canChangePageFormat: false,
+              canChangeOrientation: false,
+              canDebug: false,
+              allowPrinting: true,
+              allowSharing: true,
+              actions: [
+                IconButton(
+                  tooltip: 'Upload TTD / Stempel',
+                  icon: const Icon(Icons.upload_file),
+                  onPressed: _pickAndSetSignature,
+                ),
+              ],
+            ),
           );
 
-    return Scaffold(
-      body: MacShell(
-        selected: 'Inspeksi Bulanan',
+    return Theme(
+      data: macLightTheme(),
+      child: Scaffold(
+        body: MacShell(
+          selected: 'Inspeksi Bulanan',
         onSelected: (value) => _navigateMacMenu(context, value),
         title: _editingSig ? 'Atur Posisi TTD' : 'Preview PDF',
         actions: [

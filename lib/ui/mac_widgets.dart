@@ -1,6 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'mac_tokens.dart';
+
+class MacThemeScope extends InheritedWidget {
+  final ThemeMode mode;
+  final ValueChanged<ThemeMode> onChanged;
+
+  const MacThemeScope({
+    super.key,
+    required this.mode,
+    required this.onChanged,
+    required super.child,
+  });
+
+  static MacThemeScope of(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<MacThemeScope>()!;
+  }
+
+  @override
+  bool updateShouldNotify(MacThemeScope oldWidget) => mode != oldWidget.mode;
+}
 
 class MacCard extends StatelessWidget {
   final Widget child;
@@ -83,7 +103,16 @@ class MacToolbar extends StatelessWidget implements PreferredSizeWidget {
         ),
         child: Row(
           children: [
-            if (leading != null) ...[leading!, const SizedBox(width: 8)],
+            if (leading != null)
+              leading!
+            else if (Navigator.canPop(context))
+              IconButton(
+                onPressed: () => Navigator.maybePop(context),
+                icon: const Icon(Icons.chevron_left, size: 20),
+                tooltip: 'Kembali',
+              ),
+            if (leading != null || Navigator.canPop(context))
+              const SizedBox(width: 8),
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -115,11 +144,15 @@ class MacToolbar extends StatelessWidget implements PreferredSizeWidget {
 class MacSidebar extends StatelessWidget {
   final String selected;
   final ValueChanged<String> onSelected;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeChanged;
 
   const MacSidebar({
     super.key,
     required this.selected,
     required this.onSelected,
+    required this.themeMode,
+    required this.onThemeChanged,
   });
 
   @override
@@ -156,6 +189,7 @@ class MacSidebar extends StatelessWidget {
           const SizedBox(height: 14),
           _label(context, 'Master Data'),
           _item(context, 'Pengaturan Master', Icons.settings_outlined),
+          _themeSwitch(context),
           const Spacer(),
           Text(
             'Inspeksi & Monitoring',
@@ -212,6 +246,113 @@ class MacSidebar extends StatelessWidget {
                     fontSize: 12,
                     fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                   ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _themeSwitch(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 18, 10, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+            child: Text(
+              'Tampilan',
+              style: TextStyle(
+                color: colors.onSurfaceVariant,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          Container(
+            height: 28,
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(MacMetrics.smallRadius),
+              border: Border.all(color: colors.outlineVariant),
+            ),
+            child: Row(
+              children: [
+                _themeSegment(
+                  context,
+                  'Terang',
+                  Icons.light_mode,
+                  ThemeMode.light,
+                ),
+                _themeDivider(context),
+                _themeSegment(
+                  context,
+                  'Gelap',
+                  Icons.dark_mode,
+                  ThemeMode.dark,
+                ),
+                _themeDivider(context),
+                _themeSegment(
+                  context,
+                  'Sistem',
+                  Icons.brightness_auto,
+                  ThemeMode.system,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _themeDivider(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 20,
+      color: Theme.of(context).colorScheme.outlineVariant,
+    );
+  }
+
+  Widget _themeSegment(
+    BuildContext context,
+    String label,
+    IconData icon,
+    ThemeMode value,
+  ) {
+    final colors = Theme.of(context).colorScheme;
+    final active = themeMode == value;
+    return Expanded(
+      child: InkWell(
+        onTap: () => onThemeChanged(value),
+        borderRadius: BorderRadius.circular(MacMetrics.smallRadius),
+        child: Container(
+          height: 26,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? colors.primary.withValues(alpha: 0.14) : null,
+            borderRadius: BorderRadius.circular(MacMetrics.smallRadius),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: active ? colors.primary : colors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  color: active ? colors.primary : colors.onSurfaceVariant,
+                  fontSize: 9,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                 ),
               ),
             ],
@@ -278,10 +419,24 @@ class MacShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          final nav = Navigator.of(context);
+          if (nav.canPop()) nav.maybePop();
+        },
+      },
+      child: Focus(autofocus: true, child: _buildBody(context)),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
     return Row(
       children: [
         MacSidebar(
           selected: selected,
+          themeMode: MacThemeScope.of(context).mode,
+          onThemeChanged: MacThemeScope.of(context).onChanged,
           onSelected: (value) {
             if (value == selected) return;
             if (onSelected != null) {
