@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +14,9 @@ import 'package:image/image.dart' as img;
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:cross_file/cross_file.dart';
 import 'package:pasteboard/pasteboard.dart';
+
+import 'ui/mac_theme.dart';
+import 'ui/mac_widgets.dart';
 
 const navy = Color(0xFF12345B);
 const blue = Color(0xFF1D70B8);
@@ -43,9 +45,7 @@ const _pdfPagePadRight = 42.0;
 const _pdfContentW = _pdfPageW - _pdfPagePadLeft - _pdfPagePadRight;
 
 double _pdfRowHeight(int findingCount) {
-  return findingCount <= 3
-      ? 108.0
-      : (324.0 / findingCount).clamp(48.0, 108.0);
+  return findingCount <= 3 ? 108.0 : (324.0 / findingCount).clamp(48.0, 108.0);
 }
 
 double _signatureFooterTop(int findingCount) {
@@ -95,7 +95,9 @@ List<double> _signatureImageSize(String? encoded, double scale) {
 List<double> _signatureImageSizeFromAspect(double ratio, double scale) {
   const fallbackRatio = _pdfSigImageW / _pdfSigImageH;
   final safeRatio = ratio > 0 ? ratio : fallbackRatio;
-  final baseW = safeRatio >= fallbackRatio ? _pdfSigImageW : _pdfSigImageH * safeRatio;
+  final baseW = safeRatio >= fallbackRatio
+      ? _pdfSigImageW
+      : _pdfSigImageH * safeRatio;
   final baseH = baseW / safeRatio;
   return [baseW * scale, baseH * scale];
 }
@@ -149,32 +151,24 @@ class App extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         title: 'Inspeksi & Monitoring',
         scrollBehavior: const _MacScrollBehavior(),
-        theme: ThemeData(
-          useMaterial3: true,
-          fontFamily: 'Segoe UI',
-          colorScheme: ColorScheme.fromSeed(seedColor: navy),
-          scaffoldBackgroundColor: const Color(0xFFF5F7FA),
-          splashFactory: NoSplash.splashFactory,
-          pageTransitionsTheme: const PageTransitionsTheme(
-            builders: {
-              TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-              TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-            },
-          ),
-          appBarTheme: const AppBarTheme(
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            surfaceTintColor: Colors.transparent,
-          ),
-          inputDecorationTheme: const InputDecorationTheme(
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(),
-          ),
-        ),
+        theme: macLightTheme(),
+        darkTheme: macDarkTheme(),
+        themeMode: ThemeMode.system,
         home: const HomePage(),
       ),
     );
+  }
+}
+
+void _navigateMacMenu(BuildContext context, String value) {
+  if (value == 'Beranda') {
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  } else if (value == 'Inspeksi Bulanan') {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const InspectionListPage()));
+  } else if (value == 'Pengaturan Master') {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const MasterPage()));
   }
 }
 
@@ -454,79 +448,82 @@ class HomePage extends StatelessWidget {
     ];
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Inspeksi, Monitoring & Laporang'),
-        backgroundColor: navy,
-        foregroundColor: Colors.white,
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 950),
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Beranda',
-                  style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.bold,
-                    color: navy,
+      body: MacShell(
+        selected: 'Beranda',
+        onSelected: (value) => _navigateMacMenu(context, value),
+        title: 'Beranda',
+        subtitle: 'Inspeksi & Monitoring',
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 950),
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Beranda',
+                    style: TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                      color: navy,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                const Text('Pilih menu untuk mulai bekerja.'),
-                const SizedBox(height: 28),
-                Expanded(
-                  child: GridView.builder(
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 330,
-                          mainAxisExtent: 150,
-                          crossAxisSpacing: 18,
-                          mainAxisSpacing: 18,
-                        ),
-                    itemCount: menus.length,
-                    itemBuilder: (context, index) {
-                      final menu = menus[index];
-                      return Card(
-                        elevation: menu.enabled ? 2 : 0,
-                        color: menu.enabled
-                            ? Colors.white
-                            : Colors.grey.shade200,
-                        child: InkWell(
-                          onTap: menu.enabled ? menu.action : null,
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  menu.icon,
-                                  size: 40,
-                                  color: menu.enabled ? blue : Colors.grey,
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Text(
-                                    menu.title,
-                                    style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w600,
-                                      color: menu.enabled ? navy : Colors.grey,
+                  const SizedBox(height: 8),
+                  const Text('Pilih menu untuk mulai bekerja.'),
+                  const SizedBox(height: 28),
+                  Expanded(
+                    child: GridView.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 330,
+                            mainAxisExtent: 150,
+                            crossAxisSpacing: 18,
+                            mainAxisSpacing: 18,
+                          ),
+                      itemCount: menus.length,
+                      itemBuilder: (context, index) {
+                        final menu = menus[index];
+                        return Card(
+                          elevation: menu.enabled ? 2 : 0,
+                          color: menu.enabled
+                              ? Colors.white
+                              : Colors.grey.shade200,
+                          child: InkWell(
+                            onTap: menu.enabled ? menu.action : null,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    menu.icon,
+                                    size: 40,
+                                    color: menu.enabled ? blue : Colors.grey,
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Text(
+                                      menu.title,
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w600,
+                                        color: menu.enabled
+                                            ? navy
+                                            : Colors.grey,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -549,33 +546,42 @@ class MasterPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Pengaturan Master'),
-        backgroundColor: navy,
-        foregroundColor: Colors.white,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          MasterTile('Master Unit', Icons.business, () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const UnitPage()),
-            );
-          }),
-          MasterTile('Master Staff / PIC', Icons.people, () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const StaffPage()),
-            );
-          }),
-          MasterTile('Pengaturan Umum', Icons.tune, () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsPage()),
-            );
-          }),
-        ],
+      body: MacShell(
+        selected: 'Pengaturan Master',
+        onSelected: (value) => _navigateMacMenu(context, value),
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            const SizedBox(height: 8),
+            MacSection(
+              title: 'Master Data',
+              child: Column(
+                children: [
+                  MasterTile('Master Unit', Icons.business, () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const UnitPage()),
+                    );
+                  }),
+                  const Divider(),
+                  MasterTile('Master Staff / PIC', Icons.people, () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const StaffPage()),
+                    );
+                  }),
+                  const Divider(),
+                  MasterTile('Pengaturan Umum', Icons.tune, () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SettingsPage()),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -589,13 +595,11 @@ class MasterTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon, color: blue),
-        title: Text(title),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
-      ),
+    return ListTile(
+      leading: Icon(icon, size: 18),
+      title: Text(title, style: const TextStyle(fontSize: 13)),
+      trailing: const Icon(Icons.chevron_right, size: 14),
+      onTap: onTap,
     );
   }
 }
@@ -606,17 +610,18 @@ class UnitPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Master Unit'),
-        backgroundColor: navy,
-        foregroundColor: Colors.white,
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => editUnit(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Tambah'),
-      ),
+    return MacScaffold(
+      selected: 'Pengaturan Master',
+      onSelected: (value) => _navigateMacMenu(context, value),
+      title: 'Master Unit',
+      actions: [
+        FilledButton.icon(
+          onPressed: () => editUnit(context),
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('Tambah'),
+        ),
+        const SizedBox(width: 8),
+      ],
       body: store.units.isEmpty
           ? const EmptyState('Belum ada unit.')
           : ListView.builder(
@@ -715,17 +720,18 @@ class StaffPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Master Staff / PIC'),
-        backgroundColor: navy,
-        foregroundColor: Colors.white,
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => editStaff(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Tambah'),
-      ),
+    return MacScaffold(
+      selected: 'Pengaturan Master',
+      onSelected: (value) => _navigateMacMenu(context, value),
+      title: 'Master Staff / PIC',
+      actions: [
+        FilledButton.icon(
+          onPressed: () => editStaff(context),
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('Tambah'),
+        ),
+        const SizedBox(width: 8),
+      ],
       body: store.staff.isEmpty
           ? const EmptyState('Belum ada staff / PIC.')
           : ListView.builder(
@@ -844,12 +850,10 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Pengaturan Umum'),
-        backgroundColor: navy,
-        foregroundColor: Colors.white,
-      ),
+    return MacScaffold(
+      selected: 'Pengaturan Master',
+      onSelected: (value) => _navigateMacMenu(context, value),
+      title: 'Pengaturan Umum',
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: ConstrainedBox(
@@ -902,47 +906,48 @@ class _InspectionListPageState extends State<InspectionListPage> {
       return unit.contains(lower) || dates.format(item.date).contains(query);
     }).toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Inspeksi Bulanan'),
-        backgroundColor: navy,
-        foregroundColor: Colors.white,
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          if (store.units.isEmpty) {
-            showInfo(
-              context,
-              'Tambah unit terlebih dahulu di Pengaturan Master.',
-            );
-            return;
-          }
-          final inspection = Inspection(
-            id: DateTime.now().microsecondsSinceEpoch.toString(),
-            date: DateTime.now(),
-            unitId: store.units.first.id,
-            findings: [Finding()],
-          );
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => InspectionFormPage(data: inspection),
-            ),
-          );
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('Tambah'),
-      ),
+    void addInspection() {
+      if (store.units.isEmpty) {
+        showInfo(context, 'Tambah unit terlebih dahulu di Pengaturan Master.');
+        return;
+      }
+      final inspection = Inspection(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        date: DateTime.now(),
+        unitId: store.units.first.id,
+        findings: [Finding()],
+      );
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => InspectionFormPage(data: inspection)),
+      );
+    }
+
+    return MacScaffold(
+      selected: 'Inspeksi Bulanan',
+      onSelected: (value) => _navigateMacMenu(context, value),
+      title: 'Inspeksi Bulanan',
+      actions: [
+        FilledButton.icon(
+          onPressed: addInspection,
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('Tambah'),
+        ),
+        const SizedBox(width: 8),
+      ],
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                labelText: 'Cari tanggal atau unit',
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: TextField(
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search, size: 17),
+                  hintText: 'Cari tanggal atau unit',
+                ),
+                onChanged: (value) => setState(() => query = value),
               ),
-              onChanged: (value) => setState(() => query = value),
             ),
           ),
           Expanded(
@@ -1044,64 +1049,77 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Inspeksi Bulanan - Halaman 1'),
-        backgroundColor: navy,
-        foregroundColor: Colors.white,
-      ),
+    return MacScaffold(
+      selected: 'Inspeksi Bulanan',
+      onSelected: (value) => _navigateMacMenu(context, value),
+      title: 'Inspeksi Bulanan',
+      subtitle: 'Halaman 1 · Data & Temuan',
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1150),
+            constraints: const BoxConstraints(maxWidth: 860),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SectionTitle('Data Inspeksi'),
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        onTap: chooseDate,
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Hari / Tanggal',
+                const Text(
+                  'Data Inspeksi',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 12),
+                MacCard(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: chooseDate,
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Hari / Tanggal',
+                            ),
+                            child: Text(dates.format(data.date)),
                           ),
-                          child: Text(dates.format(data.date)),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: data.unitId.isEmpty ? null : data.unitId,
-                        decoration: const InputDecoration(
-                          labelText: 'Inspeksi BUJP ke Unit',
-                        ),
-                        items: store.units
-                            .map(
-                              (unit) => DropdownMenuItem(
-                                value: unit.id,
-                                child: Text(
-                                  unit.code.isEmpty
-                                      ? unit.name
-                                      : '${unit.name} (${unit.code})',
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: data.unitId.isEmpty
+                              ? null
+                              : data.unitId,
+                          decoration: const InputDecoration(
+                            labelText: 'Inspeksi BUJP ke Unit',
+                          ),
+                          items: store.units
+                              .map(
+                                (unit) => DropdownMenuItem(
+                                  value: unit.id,
+                                  child: Text(
+                                    unit.code.isEmpty
+                                        ? unit.name
+                                        : '${unit.name} (${unit.code})',
+                                  ),
                                 ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) =>
-                            setState(() => data.unitId = value ?? ''),
+                              )
+                              .toList(),
+                          onChanged: (value) =>
+                              setState(() => data.unitId = value ?? ''),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 24),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const SectionTitle('Temuan (maksimal 5)'),
+                    const Text(
+                      'Temuan (maksimal 5)',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     OutlinedButton.icon(
                       onPressed: data.findings.length >= 5
                           ? null
@@ -1376,12 +1394,11 @@ class _DocumentationPageState extends State<DocumentationPage> {
       },
       child: Focus(
         autofocus: true,
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('Dokumentasi - Halaman 2'),
-            backgroundColor: navy,
-            foregroundColor: Colors.white,
-          ),
+        child: MacScaffold(
+          selected: 'Inspeksi Bulanan',
+          onSelected: (value) => _navigateMacMenu(context, value),
+          title: 'Dokumentasi',
+          subtitle: 'Halaman 2 · Evidence',
           body: DropTarget(
             onDragEntered: (detail) => setState(() => _isDragging = true),
             onDragExited: (detail) => setState(() => _isDragging = false),
@@ -1554,15 +1571,16 @@ class _DocumentationPageState extends State<DocumentationPage> {
 class SectionTitle extends StatelessWidget {
   final String text;
   const SectionTitle(this.text, {super.key});
+
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 14),
+    padding: const EdgeInsets.only(bottom: 12),
     child: Text(
       text,
-      style: const TextStyle(
-        fontSize: 21,
-        fontWeight: FontWeight.bold,
-        color: navy,
+      style: TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        color: Theme.of(context).colorScheme.onSurface,
       ),
     ),
   );
@@ -1571,11 +1589,19 @@ class SectionTitle extends StatelessWidget {
 class EmptyState extends StatelessWidget {
   final String text;
   const EmptyState(this.text, {super.key});
+
   @override
   Widget build(BuildContext context) => Center(
     child: Padding(
       padding: const EdgeInsets.all(40),
-      child: Text(text, style: const TextStyle(color: Colors.grey)),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontSize: 13,
+        ),
+      ),
     ),
   );
 }
@@ -1812,7 +1838,10 @@ pw.Widget _noteItem(String title, String desc) {
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(title, style: pw.TextStyle(font: pw.Font.helveticaBold(), fontSize: 6)),
+        pw.Text(
+          title,
+          style: pw.TextStyle(font: pw.Font.helveticaBold(), fontSize: 6),
+        ),
         pw.Padding(
           padding: const pw.EdgeInsets.only(left: 12),
           child: pw.Text(desc, style: const pw.TextStyle(fontSize: 6)),
@@ -1836,12 +1865,15 @@ Future<Uint8List> buildPdf(
 
   final n = data.findings.length;
   final rowH = _pdfRowHeight(n);
-  final useSavedSignatureLayout = data.sigAbsolute &&
+  final useSavedSignatureLayout =
+      data.sigAbsolute &&
       data.sigPosV2 &&
       data.sigLayoutVersion >= _sigLayoutVersion;
-  final sigScale = (useSavedSignatureLayout ? data.sigW : _sigDefaultScale)
-      ?.clamp(_sigMinScale, _sigMaxScale)
-      .toDouble() ?? _sigDefaultScale;
+  final sigScale =
+      (useSavedSignatureLayout ? data.sigW : _sigDefaultScale)
+          ?.clamp(_sigMinScale, _sigMaxScale)
+          .toDouble() ??
+      _sigDefaultScale;
   final sigSize = _signatureImageSize(data.signature, sigScale);
   final sigImageW = sigSize[0];
   final sigImageH = sigSize[1];
@@ -1895,8 +1927,8 @@ Future<Uint8List> buildPdf(
           final picText = picStaff == null
               ? ''
               : (picStaff.position.isNotEmpty
-                  ? picStaff.position
-                  : picStaff.name);
+                    ? picStaff.position
+                    : picStaff.name);
           rows.add(
             pw.TableRow(
               children: [
@@ -1939,7 +1971,9 @@ Future<Uint8List> buildPdf(
                   height: rowH,
                   child: pw.Center(
                     child: pw.Text(
-                      finding.target == null ? '' : dates.format(finding.target!),
+                      finding.target == null
+                          ? ''
+                          : dates.format(finding.target!),
                       style: const pw.TextStyle(fontSize: 9),
                     ),
                   ),
@@ -1954,85 +1988,103 @@ Future<Uint8List> buildPdf(
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
-            pw.Center(
-              child: pw.Text(
-                'INSPEKSI KEAMANAN\nBADAN USAHA JASA PENGAMANAN',
-                textAlign: pw.TextAlign.center,
-                style: pw.TextStyle(font: bold, fontSize: 15),
-              ),
-            ),
-            pw.SizedBox(height: 18),
-            _pdfInfoRow('1.', 'Hari/Tanggal', fullDates.format(data.date)),
-            _pdfInfoRow('2.', 'Inspeksi BUJP ke Unit', unit),
-            pw.SizedBox(height: 14),
-            pw.Table(
-              border: pw.TableBorder.all(width: 1.0),
-              columnWidths: {
-                0: const pw.FlexColumnWidth(0.5),
-                1: const pw.FlexColumnWidth(2.5),
-                2: const pw.FlexColumnWidth(1.5),
-                3: const pw.FlexColumnWidth(1.5),
-              },
-              children: rows,
-            ),
-            pw.SizedBox(height: 12),
-            pw.Text(
-              'Catatan Temuan :',
-              style: pw.TextStyle(font: bold, fontSize: 10),
-            ),
-            pw.Container(
-              width: double.infinity,
-              height: 112,
-              padding: const pw.EdgeInsets.all(8),
-              decoration: pw.BoxDecoration(border: pw.Border.all(width: 1.0)),
-              child: pw.Text(
-                data.notes,
-                style: const pw.TextStyle(fontSize: 9),
-              ),
-            ),
-            pw.SizedBox(height: 24),
-            pw.SizedBox(
-              height: _sigFooterH,
-              child: pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                pw.Expanded(
-                  flex: 5,
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('Keterangan :', style: pw.TextStyle(font: bold, fontSize: 6)),
-                      pw.SizedBox(height: 4),
-                      _noteItem('1. Kolom Temuan :', 'Temuan yang didapatkan oleh Manajemen BUJP'),
-                      _noteItem('2. Kolom PIC :', 'Penanggung jawab yang mendapatkan disposisi dari Manajemen BUJP'),
-                      _noteItem('3. Kolom Target Waktu Penyelesaian :', 'Tanggal temuan selesai ditindaklanjuti'),
-                      _noteItem('4. Catatan temuan :', 'Di isi dengan keterangan temuan'),
-                    ],
-                  ),
+              pw.Center(
+                child: pw.Text(
+                  'INSPEKSI KEAMANAN\nBADAN USAHA JASA PENGAMANAN',
+                  textAlign: pw.TextAlign.center,
+                  style: pw.TextStyle(font: bold, fontSize: 15),
                 ),
-                pw.Expanded(
-                  flex: 4,
-                  child: pw.Column(
-                    children: [
-                      pw.Text('Mengetahui,', style: const pw.TextStyle(fontSize: 9)),
-                      pw.SizedBox(height: 3),
-                      pw.Text(
-                        store.companyName,
-                        style: pw.TextStyle(font: bold, fontSize: 9),
-                        textAlign: pw.TextAlign.center,
-                      ),
-                      pw.SizedBox(height: 8),
-                      pw.SizedBox(
-                        width: _pdfSigSlotW,
-                        height: _pdfSigSlotH,
-                      ),
-                      pw.SizedBox(height: 2),
-                    ],
-                  ),
-                ),
-                ],
               ),
-            ),
+              pw.SizedBox(height: 18),
+              _pdfInfoRow('1.', 'Hari/Tanggal', fullDates.format(data.date)),
+              _pdfInfoRow('2.', 'Inspeksi BUJP ke Unit', unit),
+              pw.SizedBox(height: 14),
+              pw.Table(
+                border: pw.TableBorder.all(width: 1.0),
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(0.5),
+                  1: const pw.FlexColumnWidth(2.5),
+                  2: const pw.FlexColumnWidth(1.5),
+                  3: const pw.FlexColumnWidth(1.5),
+                },
+                children: rows,
+              ),
+              pw.SizedBox(height: 12),
+              pw.Text(
+                'Catatan Temuan :',
+                style: pw.TextStyle(font: bold, fontSize: 10),
+              ),
+              pw.Container(
+                width: double.infinity,
+                height: 112,
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(border: pw.Border.all(width: 1.0)),
+                child: pw.Text(
+                  data.notes,
+                  style: const pw.TextStyle(fontSize: 9),
+                ),
+              ),
+              pw.SizedBox(height: 24),
+              pw.SizedBox(
+                height: _sigFooterH,
+                child: pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Expanded(
+                      flex: 5,
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'Keterangan :',
+                            style: pw.TextStyle(font: bold, fontSize: 6),
+                          ),
+                          pw.SizedBox(height: 4),
+                          _noteItem(
+                            '1. Kolom Temuan :',
+                            'Temuan yang didapatkan oleh Manajemen BUJP',
+                          ),
+                          _noteItem(
+                            '2. Kolom PIC :',
+                            'Penanggung jawab yang mendapatkan disposisi dari Manajemen BUJP',
+                          ),
+                          _noteItem(
+                            '3. Kolom Target Waktu Penyelesaian :',
+                            'Tanggal temuan selesai ditindaklanjuti',
+                          ),
+                          _noteItem(
+                            '4. Catatan temuan :',
+                            'Di isi dengan keterangan temuan',
+                          ),
+                        ],
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 4,
+                      child: pw.Column(
+                        children: [
+                          pw.Text(
+                            'Mengetahui,',
+                            style: const pw.TextStyle(fontSize: 9),
+                          ),
+                          pw.SizedBox(height: 3),
+                          pw.Text(
+                            store.companyName,
+                            style: pw.TextStyle(font: bold, fontSize: 9),
+                            textAlign: pw.TextAlign.center,
+                          ),
+                          pw.SizedBox(height: 8),
+                          pw.SizedBox(
+                            width: _pdfSigSlotW,
+                            height: _pdfSigSlotH,
+                          ),
+                          pw.SizedBox(height: 2),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         );
@@ -2122,7 +2174,12 @@ class PdfPage extends StatefulWidget {
   final Uint8List bytes;
   final Inspection data;
   final AppStore store;
-  const PdfPage({super.key, required this.bytes, required this.data, required this.store});
+  const PdfPage({
+    super.key,
+    required this.bytes,
+    required this.data,
+    required this.store,
+  });
 
   @override
   State<PdfPage> createState() => _PdfPageState();
@@ -2194,7 +2251,10 @@ class _SignatureSlotPainter extends CustomPainter {
       );
       canvas.drawLine(
         Offset(x, _sigUpPt + _sigNameTop + _sigOverlapPt),
-        Offset((x + dash).clamp(0.0, slotW), _sigUpPt + _sigNameTop + _sigOverlapPt),
+        Offset(
+          (x + dash).clamp(0.0, slotW),
+          _sigUpPt + _sigNameTop + _sigOverlapPt,
+        ),
         guidePaint,
       );
     }
@@ -2259,7 +2319,11 @@ class _PdfPageState extends State<PdfPage> {
       widget.data.sigLayoutVersion = _sigLayoutVersion;
       await widget.store.saveInspection(widget.data);
       // Build PDF tanpa TTD sebagai latar editor.
-      final newBytes = await buildPdf(widget.data, widget.store, includeSignature: false);
+      final newBytes = await buildPdf(
+        widget.data,
+        widget.store,
+        includeSignature: false,
+      );
       if (!mounted) return;
       setState(() {
         _currentBytes = newBytes;
@@ -2270,12 +2334,15 @@ class _PdfPageState extends State<PdfPage> {
   }
 
   (double, double, double) _loadSavedSigPosition() {
-    final useSavedPosition = widget.data.sigAbsolute &&
+    final useSavedPosition =
+        widget.data.sigAbsolute &&
         widget.data.sigPosV2 &&
         widget.data.sigLayoutVersion >= _sigLayoutVersion;
-    final sigW = (useSavedPosition ? widget.data.sigW : _sigDefaultScale)
-        ?.clamp(_sigMinScale, _sigMaxScale)
-        .toDouble() ?? _sigDefaultScale;
+    final sigW =
+        (useSavedPosition ? widget.data.sigW : _sigDefaultScale)
+            ?.clamp(_sigMinScale, _sigMaxScale)
+            .toDouble() ??
+        _sigDefaultScale;
     final sigX = useSavedPosition ? (widget.data.sigX ?? 0.5) : 0.5;
     final sigY = useSavedPosition
         ? (widget.data.sigY ?? _defaultSignatureY(widget.data.signature, sigW))
@@ -2298,7 +2365,11 @@ class _PdfPageState extends State<PdfPage> {
     _cacheSignature();
     setState(() => _editingSig = true);
     // Build PDF tanpa TTD sebagai latar editor.
-    final cleanBytes = await buildPdf(widget.data, widget.store, includeSignature: false);
+    final cleanBytes = await buildPdf(
+      widget.data,
+      widget.store,
+      includeSignature: false,
+    );
     setState(() => _currentBytes = cleanBytes);
     await _rasterizePage1();
   }
@@ -2399,64 +2470,57 @@ class _PdfPageState extends State<PdfPage> {
 
   @override
   Widget build(BuildContext context) {
+    final preview = _editingSig && _page1Image != null
+        ? _buildPageSigEditor()
+        : _editingSig && _page1Image == null
+        ? const Center(child: CircularProgressIndicator())
+        : PdfPreview(
+            key: ValueKey(_rev),
+            build: (_) async => _currentBytes,
+            canChangePageFormat: false,
+            canChangeOrientation: false,
+            canDebug: false,
+            allowPrinting: true,
+            allowSharing: true,
+            actions: [
+              IconButton(
+                tooltip: 'Upload TTD / Stempel',
+                icon: const Icon(Icons.upload_file),
+                onPressed: _pickAndSetSignature,
+              ),
+            ],
+          );
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_editingSig ? 'Atur Posisi TTD' : 'Preview PDF'),
-        backgroundColor: navy,
-        foregroundColor: Colors.white,
+      body: MacShell(
+        selected: 'Inspeksi Bulanan',
+        onSelected: (value) => _navigateMacMenu(context, value),
+        title: _editingSig ? 'Atur Posisi TTD' : 'Preview PDF',
         actions: [
           if (!_editingSig)
             IconButton(
-              tooltip: widget.data.signature == null ? 'Upload TTD' : 'Atur TTD',
+              tooltip: widget.data.signature == null
+                  ? 'Upload TTD'
+                  : 'Atur TTD',
               onPressed: _enterEditMode,
               icon: Icon(
-                widget.data.signature == null
-                    ? Icons.draw
-                    : Icons.edit,
+                widget.data.signature == null ? Icons.draw : Icons.edit,
               ),
             ),
           if (_editingSig) ...[
             TextButton.icon(
               onPressed: _pickAndSetSignature,
-              icon: const Icon(Icons.upload_file, size: 16, color: Colors.white),
-              label: const Text('Ganti File', style: TextStyle(color: Colors.white)),
+              icon: const Icon(Icons.upload_file, size: 16),
+              label: const Text('Ganti File'),
             ),
-            TextButton(
-              onPressed: _resetSig,
-              child: const Text('Reset', style: TextStyle(color: Colors.white)),
-            ),
-            TextButton(
-              onPressed: _exitEditMode,
-              child: const Text('Batal', style: TextStyle(color: Colors.white70)),
-            ),
-            FilledButton(
-              onPressed: _saveSig,
-              child: const Text('Simpan'),
-            ),
+            TextButton(onPressed: _resetSig, child: const Text('Reset')),
+            TextButton(onPressed: _exitEditMode, child: const Text('Batal')),
+            FilledButton(onPressed: _saveSig, child: const Text('Simpan')),
             const SizedBox(width: 8),
           ],
         ],
+        child: preview,
       ),
-      body: _editingSig && _page1Image != null
-          ? _buildPageSigEditor()
-          : _editingSig && _page1Image == null
-              ? const Center(child: CircularProgressIndicator())
-              : PdfPreview(
-                  key: ValueKey(_rev),
-                  build: (_) async => _currentBytes,
-                  canChangePageFormat: false,
-                  canChangeOrientation: false,
-                  canDebug: false,
-                  allowPrinting: true,
-                  allowSharing: true,
-                  actions: [
-                    IconButton(
-                      tooltip: 'Upload TTD / Stempel',
-                      icon: const Icon(Icons.upload_file),
-                      onPressed: _pickAndSetSignature,
-                    ),
-                  ],
-                ),
     );
   }
 
@@ -2489,7 +2553,8 @@ class _PdfPageState extends State<PdfPage> {
               final sigMaxTop = _sigNameTop + _sigOverlapPt - sigPointH;
               final sigMoveH = sigMaxTop - sigMinTop;
               final sigTop = slotTop + sigMinTop + _sigY * sigMoveH;
-              final signerName = widget.store.findStaff(widget.data.picSignerId)?.name ?? '';
+              final signerName =
+                  widget.store.findStaff(widget.data.picSignerId)?.name ?? '';
 
               return InteractiveViewer(
                 constrained: false,
@@ -2505,10 +2570,7 @@ class _PdfPageState extends State<PdfPage> {
                   child: Stack(
                     children: [
                       Positioned.fill(
-                        child: Image(
-                          image: _page1Image!,
-                          fit: BoxFit.fill,
-                        ),
+                        child: Image(image: _page1Image!, fit: BoxFit.fill),
                       ),
                       Positioned(
                         left: slotLeft,
@@ -2518,7 +2580,10 @@ class _PdfPageState extends State<PdfPage> {
                             slotW.toDouble(),
                             _sigUpPt + _sigNameTop + _sigOverlapPt,
                           ),
-                          painter: _SignatureSlotPainter(slotW: slotW, slotH: slotH),
+                          painter: _SignatureSlotPainter(
+                            slotW: slotW,
+                            slotH: slotH,
+                          ),
                         ),
                       ),
                       Positioned(
@@ -2530,8 +2595,12 @@ class _PdfPageState extends State<PdfPage> {
                             setState(() {
                               final dxInPoints = details.delta.dx;
                               final dyInPoints = details.delta.dy;
-                              _sigX += dxInPoints / (slotW - sigW).clamp(1.0, double.infinity);
-                              _sigY += dyInPoints / sigMoveH.clamp(1.0, double.infinity);
+                              _sigX +=
+                                  dxInPoints /
+                                  (slotW - sigW).clamp(1.0, double.infinity);
+                              _sigY +=
+                                  dyInPoints /
+                                  sigMoveH.clamp(1.0, double.infinity);
                               _sigX = _sigX.clamp(0.0, 1.0);
                               _sigY = _sigY.clamp(0.0, 1.0);
                             });
@@ -2576,7 +2645,10 @@ class _PdfPageState extends State<PdfPage> {
           color: navy,
           child: Row(
             children: [
-              const Text('Ukuran TTD:', style: TextStyle(color: Colors.white, fontSize: 13)),
+              const Text(
+                'Ukuran TTD:',
+                style: TextStyle(color: Colors.white, fontSize: 13),
+              ),
               Expanded(
                 child: Slider(
                   value: _sigW,
