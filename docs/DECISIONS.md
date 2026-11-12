@@ -1,5 +1,13 @@
 # DECISIONS
 
+## v0.2.0-alpha
+
+- UI restyle penuh tanpa custom window chrome.
+- Font Inter dibundle sebagai asset lokal.
+- `ThemeMode.system` dengan tema light/dark macOS.
+- Sidebar kiri 220px + toolbar 52px; navigasi tetap memakai `MaterialPageRoute`.
+- Logika dan layout PDF `pw.*` tidak disentuh.
+
 ## v0.1.2-alpha
 
 - Default scale TTD: `0.75` (slider 50%–115%).

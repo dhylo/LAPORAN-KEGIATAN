@@ -6,8 +6,8 @@
 - Dependencies: `pdf ^3.11.3`, `printing ^5.14.2`, `image ^4.2.0`
 - Remote: `https://github.com/dhylo/LAPORAN-KEGIATAN.git`
 - Branch: `main` (current: `work/sig-editor-fix`)
-- Commit: `pending` (v0.1.2-alpha)
-- Tag: `v0.1.2-alpha`
+- Commit: `pending` (v0.2.0-alpha)
+- Tag: `v0.2.0-alpha`
 
 ## File structure
 - `lib/main.dart` (2563 lines): single-file app dengan all logic
@@ -20,6 +20,7 @@
 ## Core data model
 - `Inspection`: `sigX`, `sigY` (0–1), `sigW` (0.5–1.15), `sigLayoutVersion`, `sigAbsolute`, `sigPosV2`
 - `sigLayoutVersion = 9`: area drag terlihat jelas, default layout lama di-reset
+- UI `v0.2.0-alpha`: shell macOS, tema light/dark, font Inter bundled
 
 ## Signature layout (PDF)
 - Slot size: `_pdfSigSlotW = 225.0`, `_pdfSigSlotH = 102.0` (pt)

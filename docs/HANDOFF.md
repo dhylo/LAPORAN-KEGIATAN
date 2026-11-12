@@ -1,13 +1,13 @@
 # HANDOFF
 
 ## Current branch
-`main` (v0.1.2-alpha)
+`work/macos-ui` (v0.2.0-alpha, pending merge)
 
 ## Recent commit
-`pending` — `fix(sig): area geser TTD + default 0.75 (v0.1.2-alpha)`
+`pending` — `feat(ui): macOS style + Inter font (v0.2.0-alpha)`
 
 ## Tag
-`v0.1.2-alpha`
+`v0.2.0-alpha`
 
 ## Status
 - ✅ Merge `work/sig-editor-fix` → `main` done

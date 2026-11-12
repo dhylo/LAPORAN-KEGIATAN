@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.0-alpha
+
+- Restyle UI penuh bergaya macOS: sidebar, toolbar, grouped list, kartu, tombol, dialog, dan form.
+- Tambah tema terang/gelap yang mengikuti sistem operasi.
+- Bundle font Inter untuk tipografi konsisten lintas platform.
+- Tambah token UI reusable di `lib/ui/`.
+- Layout dan logika PDF tetap tidak berubah.
+
 ## v0.1.2-alpha
 
 - Default ukuran TTD menjadi 75%, dengan slider rentang 50%–115%.
