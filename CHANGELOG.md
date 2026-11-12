@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.2-alpha
+
+- Default ukuran TTD menjadi 75%, dengan slider rentang 50%–115%.
+- Garis bantu editor diperluas untuk menampilkan seluruh area drag, termasuk batas naik 33 pt.
+- Data posisi/layout lama di-reset ke default aman melalui `sigLayoutVersion = 9`.
+
 ## v0.1.1-alpha
 
 - Perbaikan revert posisi saat tombol Batal: editor selalu baca posisi terakhir dari data tersimpan, bukan dari memori sementara.

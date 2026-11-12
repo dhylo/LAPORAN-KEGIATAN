@@ -6,8 +6,8 @@
 - Dependencies: `pdf ^3.11.3`, `printing ^5.14.2`, `image ^4.2.0`
 - Remote: `https://github.com/dhylo/LAPORAN-KEGIATAN.git`
 - Branch: `main` (current: `work/sig-editor-fix`)
-- Commit: `8a637a8` (v0.1.1-alpha)
-- Tag: `v0.1.1-alpha`
+- Commit: `pending` (v0.1.2-alpha)
+- Tag: `v0.1.2-alpha`
 
 ## File structure
 - `lib/main.dart` (2563 lines): single-file app dengan all logic
@@ -19,7 +19,7 @@
 
 ## Core data model
 - `Inspection`: `sigX`, `sigY` (0–1), `sigW` (0.5–1.15), `sigLayoutVersion`, `sigAbsolute`, `sigPosV2`
-- `sigLayoutVersion = 8`: layout baru (drag akurat saat zoom)
+- `sigLayoutVersion = 9`: area drag terlihat jelas, default layout lama di-reset
 
 ## Signature layout (PDF)
 - Slot size: `_pdfSigSlotW = 225.0`, `_pdfSigSlotH = 102.0` (pt)
@@ -35,7 +35,7 @@
 - `_signatureRasterDpi = 110.0`
 
 ## Editor layout
-- `_sigMinScale = 0.5`, `_sigMaxScale = 1.15`
+- `_sigMinScale = 0.5`, `_sigDefaultScale = 0.75`, `_sigMaxScale = 1.15`
 - TTD drag delta tidak dibagi zoom — koordinat poin child `InteractiveViewer`
 - Child `InteractiveViewer`: `SizedBox(_pdfPageW, _pdfPageH)`
 - Overlay posisi: koordinat poin (tanpa `* scale`)

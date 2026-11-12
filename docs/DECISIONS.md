@@ -1,5 +1,12 @@
 # DECISIONS
 
+## v0.1.2-alpha
+
+- Default scale TTD: `0.75` (slider 50%–115%).
+- Slider memakai `divisions: 13` dan label persen.
+- `_sigLayoutVersion = 9` agar layout posisi lama kembali ke default aman.
+- Area garis bantu mencakup batas drag penuh: 33 pt di atas slot hingga 18 pt overlap nama.
+
 ## v0.1.1-alpha
 
 - `_loadSavedSigPosition()` dibuat sebagai fungsi tunggal untuk memuat `(sigW, sigX, sigY)` dari data tersimpan atau default.

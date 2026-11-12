@@ -14,9 +14,8 @@ Flutter desktop/mobile application untuk laporan inspeksi dengan fitur tanda tan
 
 ## Layout values
 - Slot: 225×102 pt
+- Area drag: 225×141 pt (33 pt up, 18 pt overlap)
 - TTD base: 90 pt di bawah slot top
-- Max overlap: 18 pt (base 108 pt)
-- Max up: 33 pt (sentuh baris "Mengetahui,")
 
 ## Editor mode
 - Preview PDF halaman 1 tanpa TTD

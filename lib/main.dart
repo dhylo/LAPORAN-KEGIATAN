@@ -25,6 +25,7 @@ const _pdfSigImageW = 150.0;
 const _pdfSigImageH = 75.0;
 const _sigMinScale = 0.5;
 const _sigMaxScale = 1.15;
+const _sigDefaultScale = 0.75;
 // Fixed name position inside signature slot. Signature moves above it.
 const _sigNameTop = 90.0;
 // TTD boleh turun menimpa nama sejauh 18 pt (dasar TTD 90 → 108).
@@ -32,7 +33,7 @@ const _sigOverlapPt = 18.0;
 // Slot mulai 33 pt di bawah baris "Mengetahui,". TTD boleh naik sampai sana.
 const _sigUpPt = 33.0;
 const _sigFooterH = 140.0;
-const _sigLayoutVersion = 8;
+const _sigLayoutVersion = 9;
 
 const _pdfPageW = 595.28;
 const _pdfPageH = 841.89; // A4 width/height in pt
@@ -1835,15 +1836,20 @@ Future<Uint8List> buildPdf(
 
   final n = data.findings.length;
   final rowH = _pdfRowHeight(n);
-  final sigScale = (data.sigW ?? 1.0).clamp(_sigMinScale, _sigMaxScale).toDouble();
+  final useSavedSignatureLayout = data.sigAbsolute &&
+      data.sigPosV2 &&
+      data.sigLayoutVersion >= _sigLayoutVersion;
+  final sigScale = (useSavedSignatureLayout ? data.sigW : _sigDefaultScale)
+      ?.clamp(_sigMinScale, _sigMaxScale)
+      .toDouble() ?? _sigDefaultScale;
   final sigSize = _signatureImageSize(data.signature, sigScale);
   final sigImageW = sigSize[0];
   final sigImageH = sigSize[1];
-  final sigX = (data.sigLayoutVersion >= _sigLayoutVersion ? (data.sigX ?? 0.5) : 0.5)
+  final sigX = (useSavedSignatureLayout ? (data.sigX ?? 0.5) : 0.5)
       .clamp(0.0, 1.0)
       .toDouble();
   final defaultY = _defaultSignatureY(data.signature, sigScale);
-  final sigY = (data.sigLayoutVersion >= _sigLayoutVersion ? (data.sigY ?? defaultY) : defaultY)
+  final sigY = (useSavedSignatureLayout ? (data.sigY ?? defaultY) : defaultY)
       .clamp(0.0, 1.0)
       .toDouble();
   final sigSlotLeft = _signatureSlotLeft();
@@ -2130,33 +2136,68 @@ class _SignatureSlotPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, slotW, slotH),
-      Paint()..color = blue.withValues(alpha: 0.05),
-    );
-    final paint = Paint()
-      ..color = blue.withValues(alpha: 0.9)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
+    final moveAreaH = _sigUpPt + _sigNameTop + _sigOverlapPt;
+    final moveAreaPaint = Paint()..color = blue.withValues(alpha: 0.025);
+    canvas.drawRect(Rect.fromLTWH(0, 0, slotW, moveAreaH), moveAreaPaint);
+
     const dash = 8.0;
     const gap = 5.0;
 
-    void drawHorizontal(double y) {
-      for (var x = 0.0; x < slotW; x += dash + gap) {
-        canvas.drawLine(Offset(x, y), Offset((x + dash).clamp(0.0, slotW), y), paint);
+    void drawDashedRect(Rect rect, Paint paint) {
+      void drawHorizontal(double y) {
+        for (var x = rect.left; x < rect.right; x += dash + gap) {
+          canvas.drawLine(
+            Offset(x, y),
+            Offset((x + dash).clamp(rect.left, rect.right), y),
+            paint,
+          );
+        }
       }
+
+      void drawVertical(double x) {
+        for (var y = rect.top; y < rect.bottom; y += dash + gap) {
+          canvas.drawLine(
+            Offset(x, y),
+            Offset(x, (y + dash).clamp(rect.top, rect.bottom)),
+            paint,
+          );
+        }
+      }
+
+      drawHorizontal(rect.top);
+      drawHorizontal(rect.bottom);
+      drawVertical(rect.left);
+      drawVertical(rect.right);
     }
 
-    void drawVertical(double x) {
-      for (var y = 0.0; y < slotH; y += dash + gap) {
-        canvas.drawLine(Offset(x, y), Offset(x, (y + dash).clamp(0.0, slotH)), paint);
-      }
-    }
+    final moveAreaPaintLine = Paint()
+      ..color = blue.withValues(alpha: 0.45)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    drawDashedRect(Rect.fromLTWH(0, 0, slotW, moveAreaH), moveAreaPaintLine);
 
-    drawHorizontal(0);
-    drawHorizontal(slotH);
-    drawVertical(0);
-    drawVertical(slotW);
+    final slotPaint = Paint()
+      ..color = blue.withValues(alpha: 0.95)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    drawDashedRect(Rect.fromLTWH(0, _sigUpPt, slotW, slotH), slotPaint);
+
+    final guidePaint = Paint()
+      ..color = blue.withValues(alpha: 0.75)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    for (var x = 0.0; x < slotW; x += dash + gap) {
+      canvas.drawLine(
+        Offset(x, _sigUpPt + _sigNameTop),
+        Offset((x + dash).clamp(0.0, slotW), _sigUpPt + _sigNameTop),
+        guidePaint,
+      );
+      canvas.drawLine(
+        Offset(x, _sigUpPt + _sigNameTop + _sigOverlapPt),
+        Offset((x + dash).clamp(0.0, slotW), _sigUpPt + _sigNameTop + _sigOverlapPt),
+        guidePaint,
+      );
+    }
   }
 
   @override
@@ -2170,7 +2211,7 @@ class _PdfPageState extends State<PdfPage> {
   ImageProvider? _page1Image;
   double _sigX = 0;
   double _sigY = 0;
-  double _sigW = 1.0;
+  double _sigW = _sigDefaultScale;
   late Uint8List _currentBytes;
   late final TransformationController _txCtrl = TransformationController();
   double _lastFittedScale = 0;
@@ -2207,7 +2248,7 @@ class _PdfPageState extends State<PdfPage> {
     final result = await pickImage();
     if (result != null) {
       widget.data.signature = base64Encode(result);
-      _sigW = 1.0;
+      _sigW = _sigDefaultScale;
       _sigX = 0.5;
       _sigY = _defaultSignatureY(widget.data.signature, _sigW);
       _cacheSignature();
@@ -2229,12 +2270,16 @@ class _PdfPageState extends State<PdfPage> {
   }
 
   (double, double, double) _loadSavedSigPosition() {
-    final sigW = (widget.data.sigW ?? 1.0).clamp(_sigMinScale, _sigMaxScale).toDouble();
     final useSavedPosition = widget.data.sigAbsolute &&
         widget.data.sigPosV2 &&
         widget.data.sigLayoutVersion >= _sigLayoutVersion;
+    final sigW = (useSavedPosition ? widget.data.sigW : _sigDefaultScale)
+        ?.clamp(_sigMinScale, _sigMaxScale)
+        .toDouble() ?? _sigDefaultScale;
     final sigX = useSavedPosition ? (widget.data.sigX ?? 0.5) : 0.5;
-    final sigY = useSavedPosition ? (widget.data.sigY ?? _defaultSignatureY(widget.data.signature, sigW)) : _defaultSignatureY(widget.data.signature, sigW);
+    final sigY = useSavedPosition
+        ? (widget.data.sigY ?? _defaultSignatureY(widget.data.signature, sigW))
+        : _defaultSignatureY(widget.data.signature, sigW);
     return (sigW, sigX, sigY);
   }
 
@@ -2308,7 +2353,7 @@ class _PdfPageState extends State<PdfPage> {
   }
 
   Future<void> _resetSig() async {
-    _sigW = 1.0;
+    _sigW = _sigDefaultScale;
     _sigX = 0.5;
     _sigY = _defaultSignatureY(widget.data.signature, _sigW);
     _cacheSignature();
@@ -2467,9 +2512,12 @@ class _PdfPageState extends State<PdfPage> {
                       ),
                       Positioned(
                         left: slotLeft,
-                        top: slotTop,
+                        top: slotTop - _sigUpPt,
                         child: CustomPaint(
-                          size: Size(slotW.toDouble(), slotH.toDouble()),
+                          size: Size(
+                            slotW.toDouble(),
+                            _sigUpPt + _sigNameTop + _sigOverlapPt,
+                          ),
                           painter: _SignatureSlotPainter(slotW: slotW, slotH: slotH),
                         ),
                       ),
@@ -2534,8 +2582,8 @@ class _PdfPageState extends State<PdfPage> {
                   value: _sigW,
                   min: _sigMinScale,
                   max: _sigMaxScale,
-                  divisions: 12,
-                  label: _sigW.toStringAsFixed(1),
+                  divisions: 13,
+                  label: '${(_sigW * 100).round()}%',
                   activeColor: Colors.white,
                   onChanged: (v) => setState(() => _sigW = v),
                 ),

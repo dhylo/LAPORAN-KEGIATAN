@@ -1,19 +1,20 @@
 # HANDOFF
 
 ## Current branch
-`main` (merge `work/sig-editor-fix`, commit `8208a26`)
+`main` (v0.1.2-alpha)
 
 ## Recent commit
-`8208a26` — `fix(sig): drag akurat saat zoom + state Batal + memori proyek (v0.1.1-alpha)`
+`pending` — `fix(sig): area geser TTD + default 0.75 (v0.1.2-alpha)`
 
 ## Tag
-`v0.1.1-alpha`
+`v0.1.2-alpha`
 
 ## Status
 - ✅ Merge `work/sig-editor-fix` → `main` done
-- ✅ Push `main`, `work/sig-editor-fix`, tag `v0.1.1-alpha` ke `origin`
+- ✅ `sigLayoutVersion = 9` (reset data lama ke default aman)
+- ✅ `_sigDefaultScale = 0.75`
+- ✅ Garis bantu editor menunjukkan area drag penuh (33 pt up)
 - ✅ `flutter analyze`: No issues
-- ✅ `flutter build windows --debug`: sukses
 
 ## File changes (v0.1.1-alpha)
 - `lib/main.dart`: `_loadSavedSigPosition()`, drag delta poin, `_cacheSignature()` sebelum `setState`
